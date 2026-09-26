@@ -1,0 +1,22 @@
+# Normalize line endings so a clone on a Linux VPS keeps working shell scripts
+# (a CRLF shebang breaks bash) while Windows .cmd launchers stay CRLF.
+* text=auto eol=lf
+
+*.sh   text eol=lf
+*.js   text eol=lf
+*.json text eol=lf
+*.jsonc text eol=lf
+*.md   text eol=lf
+*.mdx  text eol=lf
+*.ps1  text eol=crlf
+*.cmd  text eol=crlf
+*.bat  text eol=crlf
+
+# binary / never touch
+*.png  binary
+*.jpg  binary
+*.gif  binary
+*.ico  binary
+*.zip  binary
+*.woff binary
+*.woff2 binary

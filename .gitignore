@@ -1,0 +1,24 @@
+# ---- Big Pickle: secrets + runtime state never belong in git ----
+
+# secrets (created by the wizard / on first run)
+.env
+config/settings.json
+config/server.password
+config/bridge-sessions.json
+config/whatsapp-session/
+config/9router.models.json
+
+# office runtime state
+runs/
+workspaces/
+apps/
+skills/
+tools/
+node_modules/
+build/
+_dist/
+*.log
+
+# OS junk
+.DS_Store
+Thumbs.db

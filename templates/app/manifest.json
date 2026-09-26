@@ -1,0 +1,8 @@
+{
+  "name": "olympic-shop-api",
+  "description": "REST API for an Olympic memorabilia shop: catalog, cart, checkout.",
+  "stack": "node + express + sqlite",
+  "model": "9router/oc/union-alpha#medium",
+  "agent": "builder",
+  "prompt": "Build this API end to end: routes, schema, seed data, tests, README. Then write BUILD_REPORT.md."
+}

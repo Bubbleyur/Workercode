@@ -1,0 +1,124 @@
+# Big Pickle — Laptop Testing Brief
+
+Everything you run, in order. Plain terminal (Windows: PowerShell).
+
+---
+
+## 1 · Prerequisites (one time — skip if already installed)
+
+```bash
+node --version        # needs >= 18
+opencode --version    # needs OpenCode v2
+```
+
+Missing one? Bootstrap installs both (Windows uses winget + npm):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/bootstrap.ps1
+```
+
+Linux/macOS:
+
+```bash
+bash scripts/bootstrap.sh
+```
+
+---
+
+## 2 · First run (one time — the questionnaire)
+
+```bash
+node index.js --wizard
+```
+
+Navigable with **↑/↓ + Enter** for lists, **Space** to toggle multi-selects,
+radio choices shown as `●/○`, checkboxes as `✓`. It asks:
+
+- Model gateway → **9router** / Direct provider / Already configured
+- Key → paste `sk-...` (9router: stored as `NINEROUTER_API_KEY`)
+- Port for localhost session → **4096** (Enter = keep default)
+- Bind address → `127.0.0.1`, apps in parallel → **2**
+- Workspaces (company office) → count, then per dept: name, role, model, variant
+- Integrations → **Space** to toggle Discord / WhatsApp
+  - Discord → paste bot token
+  - WhatsApp → pick **QR code** (scan right away) or Cloud API token
+
+---
+
+## 3 · Every time you test
+
+```bash
+node index.js
+```
+
+Then open **http://localhost:4096** and log in with the printed credentials
+(username `opencode`, password shown in the terminal).
+
+And keep an eye on the office from above:
+
+```bash
+# control center — office staff CRUD, CEO office, new build, jobs, evaluation gates
+open http://127.0.0.1:8099/panel
+
+# clean rooftop view of every AI worker (building / idle / review / out of token)
+open http://127.0.0.1:8099/
+```
+
+In the **CEO Office** tab your CEO assistant drafts reports from live office
+data, broadcasts your notices to all staff / one division / one worker, and
+shows whether Discord and WhatsApp alerts are wired up. Enable a bridge
+notification target in the wizard (or set `DISCORD_NOTIFY_CHANNEL_ID` /
+`WHATSAPP_CEO_JID`) to get build alerts and `!report` in chat.
+
+Run with parts off if you only want a quick check:
+
+```bash
+node index.js --no-browser            # don't try to open a browser
+node index.js --no-orchestrator       # skip the app factory
+node index.js --no-bridges            # skip Discord/WhatsApp
+```
+
+Stop everything: **Ctrl+C**.
+
+---
+
+## 4 · Build an app from a folder (test the factory)
+
+```bash
+npm run new-app -- engineering my-api   # scaffolds a manifest + README into the inbox
+npm run status                          # see the job get built
+npm run logs                            # tail launcher/server/orchestrator logs
+```
+
+The app folder gets moved to `apps/engineering/my-api/` and runs the full
+**Plan → Build → Review → Test → Deploy** pipeline with evaluation gates —
+follow it live in the control panel at `http://127.0.0.1:8099/panel`. Drop any
+folder with a `manifest.json` into `workspaces/<id>/inbox/` to build without
+scaffolding, or use the **New Build** tab to just type a one-line goal.
+
+9router model catalog refresh (when you add models):
+
+```bash
+npm run 9router:sync
+```
+
+---
+
+## 5 · 24/7 mode on the laptop (optional)
+
+Leave the `node index.js` terminal open, or install it as a real service so it
+survives reboots/closed terminals:
+
+```powershell
+npm run install:service        # Windows = NSSM (auto-downloaded), run as admin
+npm run uninstall:service      # when done testing
+```
+
+---
+
+## One-line cheat sheet
+
+```bash
+node index.js --wizard && node index.js
+npm run new-app -- engineering demo && npm run status
+```

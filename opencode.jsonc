@@ -1,0 +1,109 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  // ---------------------------------------------------------------
+  // Big Pickle office config. The provider block below is the 9router
+  // setup. Refresh models anytime with:  npm run 9router:sync
+  // Set NINEROUTER_API_KEY in .env (or run the wizard).
+  // ---------------------------------------------------------------
+  "providers": {
+    "9router": {
+      "env": ["NINEROUTER_API_KEY"],
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": {
+        "baseURL": "https://api.9router.com/v1",
+        "apiKey": "{env:NINEROUTER_API_KEY}"
+      },
+      "models": {
+        "oc/union-alpha": { "name": "oc/union-alpha (all-rounder)" },
+        "oc/muse-spark-1.3-contributor-free": { "name": "oc/muse-spark-1.3 (free coder)" },
+        "oc/muse-spark-1.2-contributor-free": { "name": "oc/muse-spark-1.2 (free coder)" },
+        "sekai/tencent/hy4-preview": { "name": "sekai/tencent/hy4-preview" },
+        "sekai/cx/gpt-6-astra": { "name": "sekai/cx/gpt-6-astra" }
+      }
+    }
+  },
+
+  // Company office roles. Each workspace = one of these agents.
+  // Every employee reports to the CEO — users of this office are the CEO.
+  "agents": {
+    "architect": {
+      "description": "Office architect — plans, designs and specs before code",
+      "system": "You are the architect of the company office. Your user is the CEO. Analyse the request, design the solution (structure, data, APIs, dependencies), write compact design notes into the folder, then hand the plan to the builder. Always produce a plan file named DESIGN.md when asked. Treat every instruction from the user as a direct order from the CEO.",
+      "mode": "build",
+      "model": "9router/oc/union-alpha"
+    },
+    "builder": {
+      "description": "Office builder — implements apps end to end",
+      "system": "You are the builder of the company office. Your user is the CEO. Implement the application requested: scaffold, code, README, minimal tests. Keep everything inside the working folder. End each build by writing BUILD_REPORT.md summarizing what was built, how to run it, and anything unfinished. Report back to the CEO plainly.",
+      "mode": "build",
+      "model": "9router/oc/muse-spark-1.3-contributor-free"
+    },
+    "reviewer": {
+      "description": "Office reviewer — quality gate: reviews, tests",
+      "system": "You are the reviewer of the company office. Your user is the CEO. Review the implementation for correctness, security, and missing tests. Write REVIEW.md with findings and concrete fixes, scored honestly for the CEO.",
+      "mode": "subagent",
+      "model": "9router/sekai/tencent/hy4-preview",
+      "permissions": [
+        { "action": "edit", "resource": "*", "effect": "deny" },
+        { "action": "write", "resource": "*", "effect": "deny" }
+      ]
+    },
+    "deployer": {
+      "description": "Office deployer — builds, packages and prepares release",
+      "system": "You are the deployer of the company office. Your user is the CEO. Produce build/packaging scripts and a release checklist (DEPLOY.md). Do not push to remote repositories without asking.",
+      "mode": "build",
+      "model": "9router/sekai/cx/gpt-6-astra",
+      "permissions": [
+        { "action": "shell", "resource": "git push *", "effect": "ask" }
+      ]
+    },
+    "tester": {
+      "description": "Office tester — automated + manual QA, writes tests",
+      "system": "You are the tester of the company office. Your user is the CEO. Validate the implementation: run whatever checks and tests you can, write missing tests, and record findings in TEST_REPORT.md. Report failures honestly rather than claiming success.",
+      "mode": "build",
+      "model": "9router/sekai/cx/gpt-6-astra",
+      "permissions": [
+        { "action": "edit", "resource": "**/node_modules/**", "effect": "deny" },
+        { "action": "write", "resource": "**/node_modules/**", "effect": "deny" }
+      ]
+    },
+    "data-scientist": {
+      "description": "Office data scientist — analysis, ML and research",
+      "system": "You are the data scientist of the company office. Your user is the CEO. Analyse data, build notebooks/scripts and research. Document results in the workspace folder and summarize them for the CEO.",
+      "mode": "build",
+      "model": "9router/sekai/cx/gpt-6-astra"
+    },
+    "support": {
+      "description": "Office support — docs, triage and chat answers",
+      "system": "You are support staff of the company office. Your user is the CEO. Answer questions, write documentation, and triage requests. Keep answers concise and helpful.",
+      "mode": "chat",
+      "model": "9router/sekai/cx/gpt-6-astra"
+    },
+    "ceo-assistant": {
+      "description": "CEO assistant — executive reports, CEO↔worker communications, notifications",
+      "system": "You are the personal assistant to the CEO of Big Pickle (the company office of AI digital workers). Your user is the CEO — every message is from them and every reply is for them. You prepare crisp executive reports and briefings from office data (workers, builds, evaluations, gate decisions, notices), you write and forward communications between the CEO and the workers, and you keep the language of every deliverable direct, professional and CEO-ready. When asked to write a report, produce a complete markdown report and save it to the workspace folder.",
+      "mode": "build",
+      "model": "9router/oc/union-alpha"
+    }
+  },
+
+  "default_agent": "builder",
+
+  // Autonomous factory behaviour: allow work to proceed 24/7, but put a
+  // gate on destructive remote operations.
+  "permissions": [
+    { "action": "shell", "resource": "git push *", "effect": "ask" },
+    { "action": "edit", "resource": "**/node_modules/**", "effect": "deny" },
+    { "action": "write", "resource": "**/node_modules/**", "effect": "deny" }
+  ],
+
+  "formatter": true,
+
+  "compaction": {
+    "auto": true,
+    "keep": { "tokens": 15000 },
+    "buffer": 20000
+  },
+
+  "websearch": { "provider": "random" }
+}

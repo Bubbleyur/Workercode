@@ -1,0 +1,388 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Big Pickle — Office Cam</title>
+<style>
+  :root {
+    --bg: #060910; --panel: #0b0f16; --line: #1a2333;
+    --text: #c9d6e3; --dim: #7b8ba1; --faint: #4d5c72;
+    --green: #9fe8c8; --cyan: #7dd3fc; --amber: #fcd34d; --red: #f87171;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    display: flex; flex-direction: column;
+    background: var(--bg);
+    background-image: radial-gradient(1100px 600px at 50% -20%, #101a2c 0%, #060910 62%);
+    color: var(--text);
+    font-family: ui-monospace, "Cascadia Mono", Menlo, Consolas, monospace;
+    font-size: 13px;
+    overflow: hidden;
+  }
+
+  /* ── header ─────────────────────────────────────────────── */
+  header {
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    padding: 10px 18px; border-bottom: 1px solid var(--line);
+    background: rgba(11,15,22,.7);
+  }
+  .brand { font-size: 13px; letter-spacing: 2px; color: var(--green); font-weight: 700; }
+  .brand span { color: var(--faint); font-weight: 400; letter-spacing: 1px; }
+  #live { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; letter-spacing: 1px; color: var(--dim); }
+  #live i { width: 8px; height: 8px; border-radius: 50%; background: #334155; display: inline-block; }
+  #live.on i { background: var(--green); box-shadow: 0 0 8px var(--green); animation: blip 1.8s infinite; }
+  #live.off i { background: var(--red); box-shadow: 0 0 8px var(--red); }
+  @keyframes blip { 50% { opacity: .35 } }
+  .chips { display: flex; gap: 6px; margin-left: auto; flex-wrap: wrap; }
+  .chip {
+    font-size: 10px; letter-spacing: .5px; padding: 3px 9px; border-radius: 20px;
+    border: 1px solid var(--line); color: var(--dim); background: var(--panel);
+  }
+  .chip b { color: var(--text); font-weight: 700; }
+  .chip.good b { color: var(--green); } .chip.warn b { color: var(--amber); } .chip.bad b { color: var(--red); }
+  #clock { font-size: 11px; color: var(--faint); }
+
+  /* ── stage ──────────────────────────────────────────────── */
+  #stage { position: relative; flex: 1 1 auto; min-height: 0; }
+  #cam { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); image-rendering: pixelated; image-rendering: crisp-edges; }
+  /* very light vignette only — the scene stays readable */
+  #stage::after {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(ellipse at center, transparent 62%, rgba(3,5,9,.5) 100%);
+  }
+  #message {
+    position: absolute; inset: 0; display: none; align-items: center; justify-content: center;
+    text-align: center; color: var(--dim); letter-spacing: 1px; z-index: 4;
+  }
+  #message b { display: block; font-size: 15px; color: var(--red); margin-bottom: 6px; letter-spacing: 2px; }
+  #message.offline b { color: var(--red); }
+  #message.empty b { color: var(--amber); }
+
+  /* ── activity + legend ──────────────────────────────────── */
+  footer { border-top: 1px solid var(--line); background: var(--panel); }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; padding: 8px 18px 0; }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; font-size: 10px; color: var(--faint); letter-spacing: .5px; }
+  .legend i { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+  #activity { max-height: 118px; overflow: auto; padding: 6px 18px 10px; }
+  #activity .row {
+    display: grid; grid-template-columns: 92px 78px 1fr; gap: 10px;
+    padding: 3px 0; border-bottom: 1px solid rgba(26,35,51,.5); font-size: 11px;
+  }
+  #activity .row:last-child { border-bottom: none; }
+  #activity .st { font-weight: 700; letter-spacing: .5px; }
+  #activity .who { color: var(--faint); }
+  #activity .what { color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .s-running { color: var(--cyan); } .s-done { color: var(--green); }
+  .s-failed { color: var(--red); } .s-queued, .s-needs-review, .s-paused { color: var(--amber); }
+  .s-cancelled { color: var(--faint); }
+  #activity .none { color: var(--faint); font-style: italic; padding: 8px 0; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">BIG PICKLE <span>· OFFICE CAM</span></div>
+  <div id="live"><i></i><span id="live-text">connecting</span></div>
+  <div class="chips" id="chips"></div>
+  <div id="clock">--:--:--</div>
+</header>
+
+<div id="stage">
+  <canvas id="cam"></canvas>
+  <div id="message"><div><b></b><span></span></div></div>
+</div>
+
+<footer>
+  <div class="legend" id="legend"></div>
+  <div id="activity"><div class="none">no builds yet</div></div>
+</footer>
+
+<script>
+(() => {
+  'use strict'
+
+  const POLL_MS = 3000
+  // The scene lives in a LOGICAL pixel grid; the canvas is then scaled to fit,
+  // so the office fills the space at any size.
+  const DESK_W = 46, DESK_H = 26, PITCH_X = 50, PITCH_Y = 36
+
+  const ROLE_COLORS = {
+    architect: '#7dd3fc', builder: '#fbbf24', reviewer: '#c084fc',
+    deployer: '#34d399', tester: '#60a5fa', 'data-scientist': '#f472b6',
+    support: '#f87171', 'ceo-assistant': '#ffd166'
+  }
+  const STATE_COLORS = {
+    building: '#34d399', queued: '#fcd34d', review: '#fb923c', paused: '#94a3b8',
+    token: '#f87171', error: '#f87171', done: '#9fe8c8', idle: '#334155'
+  }
+  const TOKEN_RE = /token|quota|insufficient|balance|rate.?limit|429|401|403|authentication|invalid api|credit|payment|billing/i
+
+  const $ = id => document.getElementById(id)
+  const canvas = $('cam')
+  const ctx = canvas.getContext('2d')
+  const messageEl = $('message')
+
+  let DPR = 1, CSS_W = 0, CSS_H = 0
+  function resize () {
+    DPR = window.devicePixelRatio || 1
+    CSS_W = $('stage').clientWidth
+    CSS_H = $('stage').clientHeight
+  }
+  window.addEventListener('resize', resize); resize()
+  setInterval(() => { $('clock').textContent = new Date().toLocaleTimeString() }, 1000)
+  $('clock').textContent = new Date().toLocaleTimeString()
+
+  // ── live data ────────────────────────────────────────────────────────────
+  let health = null, workspaces = [], jobs = [], online = false
+
+  async function refresh () {
+    try {
+      const [h, w, j] = await Promise.all([
+        fetch('/health').then(r => r.json()),
+        fetch('/workspaces').then(r => r.json()),
+        fetch('/jobs').then(r => r.json())
+      ])
+      health = h; workspaces = w.workspaces || []; jobs = j.jobs || []
+      online = true
+      renderChrome()
+    } catch {
+      online = false
+      renderChrome()
+    }
+  }
+  refresh(); setInterval(refresh, POLL_MS)
+
+  function wsState (ws) {
+    const l = jobs.filter(j => j.workspaceID === ws.id)
+    const running = l.filter(j => j.status === 'running').pop()
+    const queued = l.filter(j => j.status === 'queued').length
+    const failed = [...l].reverse().find(j => j.status === 'failed')
+    const last = l[l.length - 1]
+    if (running) return { key: 'building', label: 'BUILDING', jobs: queued }
+    if (queued > 0) return { key: 'queued', label: 'QUEUED', jobs: queued }
+    if (l.some(j => j.status === 'needs-review')) return { key: 'review', label: 'REVIEW' }
+    if (l.some(j => j.status === 'paused')) return { key: 'paused', label: 'PAUSED' }
+    if (failed) {
+      const err = failed.error || ''
+      if (TOKEN_RE.test(err)) return { key: 'token', label: 'OUT OF TOKEN', err: err.slice(0, 70) }
+      return { key: 'error', label: 'ERROR', err: err.slice(0, 70) }
+    }
+    if (last && (last.status === 'done' || last.status === 'cancelled')) {
+      return { key: 'done', label: last.status === 'cancelled' ? 'STOPPED' : 'DONE ✓' }
+    }
+    return { key: 'idle', label: 'IDLE' }
+  }
+
+  // ── HTML chrome (header chips, legend, activity) ─────────────────────────
+  function chip (label, value, cls = '') {
+    return `<span class="chip ${cls}">${label} <b>${value}</b></span>`
+  }
+  function renderChrome () {
+    const live = $('live')
+    live.className = online ? 'on' : 'off'
+    $('live-text').textContent = online ? 'LIVE' : 'OFFLINE'
+
+    const states = workspaces.map(wsState)
+    const tokens = states.filter(s => s.key === 'token').length
+    const errors = states.filter(s => s.key === 'error').length
+    const review = states.filter(s => s.key === 'review').length
+    const building = states.filter(s => s.key === 'building').length
+    $('chips').innerHTML = [
+      chip('WORKERS', workspaces.length),
+      chip('BUILDING', building, 'good'),
+      chip('QUEUED', health?.queued ?? 0, 'warn'),
+      review ? chip('REVIEW', review, 'warn') : '',
+      tokens ? chip('OUT OF TOKEN', tokens, 'bad') : '',
+      errors ? chip('ERRORS', errors, 'bad') : '',
+      chip('JOBS', health?.jobs ?? jobs.length)
+    ].join('')
+
+    $('legend').innerHTML = [
+      ['building', 'building'], ['queued', 'queued'], ['review', 'needs review'],
+      ['paused', 'paused'], ['done', 'done'], ['error', 'error'], ['idle', 'idle']
+    ].map(([k, label]) => `<span><i style="background:${STATE_COLORS[k]}"></i>${label}</span>`).join('')
+
+    const act = $('activity')
+    if (!jobs.length) {
+      act.innerHTML = '<div class="none">no builds yet — submit one in the control panel (/panel)</div>'
+    } else {
+      act.innerHTML = [...jobs].reverse().slice(0, 30).map(j => {
+        const what = j.status === 'failed' ? (j.error || 'failed')
+          : j.status === 'needs-review' ? `waiting for the CEO at ${j.waitingStage || '?'}`
+            : j.status === 'done' ? `finished${j.finishedAt ? ' · ' + String(j.finishedAt).slice(5, 16).replace('T', ' ') : ''}`
+              : `${j.stage || 'queued'}${j.division ? ' · ' + j.division : ''}`
+        return `<div class="row"><span class="st s-${j.status}">${j.status.toUpperCase()}</span>` +
+          `<span class="who">${j.workspaceName || j.division || 'office'}</span>` +
+          `<span class="what" title="${j.name}">${j.name} — ${what}</span></div>`
+      }).join('')
+    }
+  }
+
+  // ── canvas drawing helpers ───────────────────────────────────────────────
+  function px (x, y, w, h, c) { ctx.fillStyle = c; ctx.fillRect(x, y, w, h) }
+  function text (txt, x, y, color, size) {
+    ctx.fillStyle = color
+    ctx.font = `${size}px ui-monospace, Menlo, Consolas, monospace`
+    ctx.textBaseline = 'top'
+    ctx.fillText(txt, x, y)
+  }
+  function textW (txt, size) {
+    ctx.font = `${size}px ui-monospace, Menlo, Consolas, monospace`
+    return ctx.measureText(txt).width
+  }
+  const blink = (t, ms, on = 1, off = 1) => (Math.floor(t / ms) % (on + off)) < on
+
+  function drawWorker (ox, oy, color, t, state, s) {
+    const bob = state.key === 'idle' ? Math.round(Math.sin(t / 600) * s) : 0
+    const y = oy + bob
+    const tap = state.key === 'building' ? (Math.round(t / 110) % 2) : 0
+    const slump = state.key === 'token' || state.key === 'error'
+    px(ox + 1 * s, y + 5 * s, 1 * s, 3 * s, color)
+    px(ox + 4 * s, y + 5 * s, 1 * s, 3 * s, color)
+    px(ox, y + 2 * s, 6 * s, 4 * s, color)
+    if (slump) {
+      px(ox, y + 5 * s, 6 * s, s, color)
+      px(ox + 2 * s, y + 3 * s, 2 * s, s, color)
+    } else {
+      px(ox - s, y + (3 + tap) * s, s, 3 * s, color)
+      px(ox + 6 * s, y + (4 - tap) * s, s, 3 * s, color)
+    }
+    px(ox, y, 6 * s, 3 * s, '#f3d9c0')
+    px(ox, y, 6 * s, s, color)
+    if (slump) {
+      px(ox + s, y + 2 * s, 4 * s, s, '#111')
+    } else {
+      px(ox + 1 * s, y + 1 * s, s, s, '#111')
+      px(ox + 4 * s, y + 1 * s, s, s, '#111')
+    }
+  }
+
+  function drawBadge (ox, oy, state, t) {
+    const size = 1.4
+    let txt = state.label
+    if (state.jobs) txt = state.jobs + ' ' + txt
+    const w = textW(txt, size) + 3, h = 3.4
+    let bg = '#111827', fg = '#9ca3af'
+    if (state.key === 'building') { bg = '#065f46'; fg = '#6ee7b7' }
+    else if (state.key === 'queued' || state.key === 'review') { bg = '#78350f'; fg = '#fcd34d' }
+    else if (state.key === 'token' || state.key === 'error') { bg = '#7f1d1d'; fg = '#f87171' }
+    else if (state.key === 'done') { bg = '#14532d'; fg = '#86efac' }
+    else if (state.key === 'paused') { bg = '#1e293b'; fg = '#94a3b8' }
+    const flash = (state.key === 'token' || state.key === 'error') ? blink(t, 420) : 1
+    const bx = ox + (DESK_W - w) / 2
+    px(bx, oy - 2.4, w, h, flash ? bg : '#450a0a')
+    text(txt, bx + 1.6, oy - 1.8, fg, size)
+  }
+
+  function drawDesk (ox, oy, t, ws, state) {
+    const color = ROLE_COLORS[ws.role] || '#9fe8c8'
+    const s = 2
+    const scr = state.key === 'building' ? (blink(t, 240) ? '#9fe8c8' : '#4ade80') : '#1f3a52'
+    drawWorker(ox + 15, oy + 4, color, t, state, s)
+    px(ox + 9, oy + 19, 29, 4, '#1c2a41')
+    px(ox + 9, oy + 19, 29, 1, '#31466b')
+    px(ox + 11, oy + 23, 3, 3, '#0f1826')
+    px(ox + 33, oy + 23, 3, 3, '#0f1826')
+    px(ox + 15, oy + 11, 16, 7, '#05070c')
+    px(ox + 17, oy + 13, 12, 4, scr)
+    if (state.key === 'queued' || state.key === 'idle' || state.key === 'review') {
+      px(ox + 38, oy + 19, 4, 3, '#7c5b3a')
+      if (blink(t, 900)) px(ox + 39, oy + 17, 2, 1, '#d1c4b0')
+    }
+    const nameF = 1.7
+    const nm = textW(ws.name, nameF) > DESK_W - 6 ? ws.name.slice(0, 10) : ws.name
+    text(nm, ox + 2, oy + 30, '#e5e7eb', nameF)
+    text((ws.role || '').toUpperCase(), ox + 2, oy + 33, color, 1.35)
+    text((ws.model || '').split('/').pop().slice(0, 20), ox + 2, oy + 36, '#55688a', 1.1)
+    drawBadge(ox, oy, state, t)
+  }
+
+  function layout () {
+    const n = Math.max(workspaces.length, 1)
+    const cols = n <= 4 ? 2 : n <= 9 ? 3 : 4
+    const rows = Math.ceil(n / cols)
+    const constr = cols * PITCH_X - 4
+    const constH = rows * PITCH_Y - 8
+    return { n, cols, rows, constr, constH, LOGC: constr + 10, LOGH: constH + 10 }
+  }
+
+  const confetti = []
+  function spawnConfetti () {
+    for (let i = 0; i < 20; i++) {
+      confetti.push({
+        x: Math.random() * 200, y: -2 - Math.random() * 10,
+        vx: (Math.random() - .5) * .7, vy: .08 + Math.random() * .15,
+        c: ['#fbbf24', '#34d399', '#7dd3fc', '#f472b6'][i % 4]
+      })
+    }
+  }
+
+  function render (t) {
+    const L = layout()
+    const scale = Math.min(CSS_W / L.LOGC, CSS_H / L.LOGH)
+    const bw = L.LOGC * scale, bh = L.LOGH * scale
+    const cx = Math.round(bw * DPR), cy = Math.round(bh * DPR)
+    if (canvas.width !== cx || canvas.height !== cy) {
+      canvas.width = cx; canvas.height = cy
+      canvas.style.width = `${bw}px`; canvas.style.height = `${bh}px`
+      ctx.setTransform(cx / L.LOGC, 0, 0, cy / L.LOGH, 0, 0)
+    }
+    ctx.clearRect(0, 0, L.LOGC, L.LOGH)
+
+    if (!online) {
+      messageEl.style.display = 'flex'
+      messageEl.className = 'offline'
+      messageEl.querySelector('b').textContent = 'OFFICE FEED LOST'
+      messageEl.querySelector('span').textContent = 'waiting for 127.0.0.1:8099 — is `node index.js` running?'
+      requestAnimationFrame(render)
+      return
+    }
+    if (!workspaces.length) {
+      messageEl.style.display = 'flex'
+      messageEl.className = 'empty'
+      messageEl.querySelector('b').textContent = 'NO STAFF YET'
+      messageEl.querySelector('span').textContent = 'run the wizard (node index.js --wizard) or hire staff in the control panel (/panel)'
+      requestAnimationFrame(render)
+      return
+    }
+    messageEl.style.display = 'none'
+
+    // floor
+    const x0 = 5, y0 = 5
+    px(x0 - 3, y0 - 3, L.constr + 6, L.constH + 6, '#0a101d')
+    px(x0, y0, L.constr, L.constH, '#0c1524')
+    for (let gx = 0; gx < L.constr; gx += 4) {
+      for (let gy = 0; gy < L.constH; gy += 4) {
+        if ((gx + gy) / 4 % 2 === 0) px(x0 + gx, y0 + gy, 1, 1, 'rgba(120,160,220,.05)')
+      }
+    }
+    px(x0 + 4, y0 + 2, L.constr - 8, 2, '#101b30')
+    px(x0 + 4, y0 + L.constH - 5, L.constr - 8, 2, '#101b30')
+    // plant
+    const pl = x0 + 2, py = y0 + L.constH - 8
+    px(pl, py + 2, 3, 3, '#4a3b2a'); px(pl + 1, py, 1, 2, '#34d399'); px(pl + 1, py - 1, 1, 1, '#4ade80')
+
+    for (let i = 0; i < workspaces.length; i++) {
+      const ws = workspaces[i]
+      const st = wsState(ws)
+      const dx = x0 + (i % L.cols) * PITCH_X
+      const dy = y0 + Math.floor(i / L.cols) * PITCH_Y
+      drawDesk(dx, dy, t, ws, st)
+      if (st.key === 'done' && Math.random() < 0.004) spawnConfetti()
+    }
+    for (const c of confetti) {
+      c.x += c.vx; c.y += c.vy
+      if (c.y > L.LOGH) c.y = L.LOGH
+      px(Math.round(c.x), Math.round(c.y), 1, 1, c.c)
+    }
+    if (confetti.length > 140) confetti.splice(0, 70)
+
+    requestAnimationFrame(render)
+  }
+  requestAnimationFrame(render)
+})()
+</script>
+</body>
+</html>

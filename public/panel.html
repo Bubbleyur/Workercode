@@ -1,0 +1,933 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Big Pickle — Digital Workers Control</title>
+<style>
+  :root {
+    --bg: #05070c; --panel: #0b0f16; --panel2: #0e1420;
+    --line: #1c2536; --line2: #26334a;
+    --text: #c9d6e3; --dim: #7b8ba1; --faint: #52627a;
+    --green: #9fe8c8; --cyan: #7dd3fc; --amber: #fbbf24;
+    --purple: #c084fc; --pink: #f472b6; --red: #f87171;
+    --mono: ui-monospace, "Cascadia Mono", Menlo, Consolas, monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg);
+    background-image: radial-gradient(1000px 600px at 50% -10%, #101a2c 0%, #05070c 60%);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13px;
+    min-height: 100vh;
+  }
+  a { color: var(--cyan); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  header {
+    display: flex; align-items: center; gap: 16px;
+    padding: 12px 20px; border-bottom: 1px solid var(--line);
+    background: rgba(11,15,22,.8); position: sticky; top: 0; z-index: 20;
+    backdrop-filter: blur(6px);
+  }
+  header .logo { font-weight: 700; letter-spacing: 1px; color: var(--green); font-size: 14px; }
+  header .logo b { color: var(--cyan); }
+  header .sub { color: var(--dim); font-size: 11px; }
+  header .spacer { flex: 1; }
+  #conn { font-size: 11px; color: var(--dim); }
+  #conn.on { color: var(--green); }
+  #conn.off { color: var(--red); }
+  #keybtn, .btn, .mini { cursor: pointer; border: 1px solid var(--line2); background: var(--panel2); color: var(--text); font-family: var(--mono); font-size: 11px; padding: 5px 10px; border-radius: 4px; }
+  #keybtn:hover, .btn:hover { border-color: var(--cyan); color: var(--cyan); }
+  .btn.primary { border-color: var(--cyan); color: var(--cyan); }
+  .btn.danger { border-color: #7f1d1d; color: var(--red); }
+  .btn.danger:hover { border-color: var(--red); }
+  .btn.ghost { background: transparent; border-color: transparent; color: var(--dim); }
+  .btn.ghost:hover { color: var(--text); border-color: var(--line2); }
+  .mini { padding: 2px 7px; font-size: 11px; }
+  .mini:hover { border-color: var(--cyan); color: var(--cyan); }
+  .mini.danger:hover { border-color: var(--red); color: var(--red); }
+  .mini.ok:hover { border-color: var(--green); color: var(--green); }
+
+  nav.tabs { display: flex; gap: 4px; padding: 10px 20px 0; border-bottom: 1px solid var(--line); background: rgba(5,7,12,.6); }
+  nav.tabs button {
+    font-family: var(--mono); font-size: 12px; cursor: pointer;
+    background: transparent; border: 1px solid transparent; border-bottom: none;
+    color: var(--dim); padding: 8px 16px; border-radius: 6px 6px 0 0;
+    letter-spacing: .5px;
+  }
+  nav.tabs button:hover { color: var(--text); }
+  nav.tabs button.active { color: var(--green); border-color: var(--line); background: var(--panel); }
+  nav.tabs button .cnt { color: var(--faint); font-size: 10px; margin-left: 4px; }
+  nav.tabs button.active .cnt { color: var(--amber); }
+
+  main { padding: 16px 20px 60px; max-width: 1400px; margin: 0 auto; }
+  section.tab { display: none; }
+  section.tab.active { display: block; }
+  h2 { font-size: 14px; color: var(--green); margin-bottom: 12px; letter-spacing: 1px; }
+  h3 { font-size: 12px; color: var(--cyan); margin: 18px 0 8px; letter-spacing: .5px; }
+  .dim { color: var(--dim); }
+  .faint { color: var(--faint); }
+
+  .grid { display: grid; grid-template-columns: 380px 1fr; gap: 16px; align-items: start; }
+  .grid.wide { grid-template-columns: 1fr 1fr; }
+
+  /* big management toolbar above tab content */
+  .toolbar {
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    padding: 12px 14px; margin-bottom: 16px;
+    background: var(--panel); border: 1px solid var(--line2); border-radius: 8px;
+  }
+  .toolbar .row { flex-wrap: nowrap; }
+  .toolbar .btn { padding: 9px 16px; font-size: 12px; }
+
+  /* report body rendering */
+  #ceo-report { font-size: 12px; line-height: 1.65; color: var(--text); max-height: 60vh; overflow: auto; white-space: pre-wrap; }
+  #ceo-report h3 { color: var(--cyan); margin: 12px 0 6px; }
+  #ceo-report ul { padding-left: 20px; }
+  #ceo-report li { margin: 2px 0; }
+  .notice-item { border-bottom: 1px solid var(--line); padding: 8px 0; }
+  .notice-item .meta { font-size: 10px; color: var(--faint); }
+
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px; margin-bottom: 14px; }
+  .card.compact { padding: 10px; }
+  .card h4 { font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: var(--dim); margin-bottom: 10px; }
+  .card h4 b { color: var(--cyan); }
+
+  label { display: block; font-size: 11px; color: var(--dim); margin: 8px 0 4px; letter-spacing: .5px; }
+  input[type=text], input[type=number], input[type=password], textarea, select {
+    width: 100%; background: var(--panel2); border: 1px solid var(--line2);
+    color: var(--text); font-family: var(--mono); font-size: 12px;
+    padding: 7px 9px; border-radius: 5px;
+  }
+  input:focus, textarea:focus, select:focus { outline: none; border-color: var(--cyan); }
+  textarea { min-height: 84px; resize: vertical; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .row > * { flex: 1 1 auto; }
+  .chips { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 6px; }
+  .chip {
+    font-size: 10px; padding: 3px 8px; border-radius: 20px;
+    border: 1px solid var(--line2); color: var(--dim); cursor: pointer; background: var(--panel2);
+  }
+  .chip.on { color: #081018; background: var(--cyan); border-color: var(--cyan); font-weight: 700; }
+  .chip.tag { cursor: default; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th { text-align: left; color: var(--faint); font-size: 10px; letter-spacing: 1px; text-transform: uppercase; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  td { padding: 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tr:hover td { background: rgba(30,41,59,.25); }
+
+  .badge { display: inline-block; font-size: 10px; padding: 2px 8px; border-radius: 20px; border: 1px solid; letter-spacing: .5px; text-transform: uppercase; }
+  .b-queued { color: var(--dim); border-color: var(--line2); }
+  .b-running { color: var(--cyan); border-color: var(--cyan); animation: pulse 1.4s infinite; }
+  .b-needs-review { color: var(--amber); border-color: var(--amber); }
+  .b-paused { color: var(--pink); border-color: var(--pink); }
+  .b-done { color: var(--green); border-color: var(--green); }
+  .b-failed { color: var(--red); border-color: var(--red); }
+  .b-cancelled { color: var(--faint); border-color: var(--line2); }
+  @keyframes pulse { 50% { opacity: .45; } }
+
+  .stages { display: flex; gap: 4px; flex-wrap: wrap; }
+  .stage-pill { font-size: 9px; padding: 2px 6px; border-radius: 3px; border: 1px solid var(--line2); color: var(--faint); background: transparent; }
+  .stage-pill.now { color: var(--cyan); border-color: var(--cyan); }
+  .stage-pill.done { color: var(--green); border-color: var(--green); background: rgba(159,232,200,.08); }
+  .stage-pill.failed { color: var(--red); border-color: var(--red); }
+  .stage-pill.skipped { color: var(--faint); border-color: var(--line); text-decoration: line-through; }
+
+  .score { font-weight: 700; font-size: 12px; }
+  .score.hi { color: var(--green); } .score.mid { color: var(--amber); } .score.lo { color: var(--red); }
+  .check { font-size: 11px; display: flex; gap: 6px; align-items: baseline; padding: 2px 0; }
+  .check .ok { color: var(--green); } .check .no { color: var(--red); } .check .inf { color: var(--faint); }
+  .critique { font-size: 12px; color: var(--amber); white-space: pre-wrap; margin-top: 4px; }
+  .mono-sm { font-size: 11px; color: var(--dim); word-break: break-all; }
+  .empty { color: var(--faint); text-align: center; padding: 24px; font-style: italic; }
+
+  iframe.roof { width: 100%; height: calc(100vh - 140px); border: 1px solid var(--line); border-radius: 8px; background: #000; }
+
+  .toast-zone { position: fixed; right: 16px; bottom: 16px; z-index: 60; display: flex; flex-direction: column; gap: 8px; }
+  .toast { background: var(--panel2); border: 1px solid var(--line2); border-left: 3px solid var(--cyan); color: var(--text); font-size: 12px; padding: 9px 14px; border-radius: 6px; box-shadow: 0 6px 24px rgba(0,0,0,.5); max-width: 420px; }
+  .toast.err { border-left-color: var(--red); }
+  .toast.ok { border-left-color: var(--green); }
+
+  dialog { background: var(--panel); border: 1px solid var(--line2); border-radius: 10px; color: var(--text); font-family: var(--mono); padding: 0; width: min(560px, 92vw); }
+  dialog::backdrop { background: rgba(2,4,8,.7); }
+  .dlg { padding: 16px; }
+  .dlg h3 { margin: 0 0 12px; color: var(--green); }
+  .dlg .actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
+
+  .hint { font-size: 11px; color: var(--faint); margin-top: 4px; line-height: 1.5; }
+  .kv { font-size: 12px; }
+  .kv b { color: var(--dim); font-weight: 400; display: inline-block; min-width: 110px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">BIG PICKLE <b>⟢</b> DIGITAL WORKERS</div>
+  <div class="sub">plan → build → review → test → deploy · evaluated at every stage</div>
+  <div class="spacer"></div>
+  <span id="conn">—</span>
+  <button id="keybtn" title="office key (config/server.password)">🔑 key</button>
+</header>
+
+<nav class="tabs">
+  <button data-tab="cam">Roof Cam</button>
+  <button data-tab="workers">Office Staff <span class="cnt" id="cnt-workers"></span></button>
+  <button data-tab="ceo">CEO Office</button>
+  <button data-tab="new">New Build</button>
+  <button data-tab="jobs">Jobs <span class="cnt" id="cnt-jobs"></span></button>
+  <button data-tab="eval">Evaluation <span class="cnt" id="cnt-eval"></span></button>
+</nav>
+
+<main>
+  <!-- ── Roof Cam ─────────────────────────────────────────────── -->
+  <section class="tab" id="tab-cam">
+    <iframe class="roof" src="/office" title="Office roof cam"></iframe>
+    <div class="hint">Live rooftop view of every worker desk. Cam API: /health · /workspaces · /jobs</div>
+  </section>
+
+  <!-- ── Workers ─────────────────────────────────────────────── -->
+  <section class="tab" id="tab-workers">
+    <div class="toolbar">
+      <div>
+        <h2 style="margin-bottom:2px">Office Staff — full CRUD</h2>
+        <div class="faint" style="font-size:11px">Hire, edit, pause and remove workers · define roles and divisions. Everything saves to <span class="dim">config/settings.json</span> and applies live.</div>
+      </div>
+      <div class="row" style="flex:0 0 auto">
+        <button class="btn primary" onclick="workerForm()">＋ Hire worker</button>
+        <button class="btn" onclick="roleForm()">＋ New role</button>
+        <button class="btn" onclick="divisionForm()">＋ New division</button>
+      </div>
+    </div>
+    <div class="grid wide">
+      <div>
+        <div class="card" id="div-card">
+          <h4><b>Divisions</b> · teams that own builds</h4>
+          <table><thead><tr><th>id</th><th>name</th><th></th></tr></thead><tbody id="div-tbody"></tbody></table>
+          <div class="row" style="margin-top:10px">
+            <input type="text" id="new-div-name" placeholder="new division name">
+            <button class="btn primary" onclick="api.divisionAdd()">＋ Add division</button>
+          </div>
+        </div>
+        <div class="card" id="roles-card">
+          <h4><b>Roles</b> · jobs in the pipeline (agent mapping)</h4>
+          <div id="roles-list" class="mono-sm"></div>
+          <button class="btn" style="margin-top:10px" onclick="roleForm()">＋ Add role</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h4><b>Workers</b> · the team (role + model + division)</h4>
+        <div class="row" style="margin-bottom:6px">
+          <button class="btn primary" onclick="workerForm()">＋ Hire worker</button>
+          <span class="faint">active workers get picked per stage (division-first, then fallback chain)</span>
+        </div>
+        <div style="overflow-x:auto">
+        <table>
+          <thead><tr><th>worker</th><th>role</th><th>division</th><th>model</th><th>status</th><th>actions</th></tr></thead>
+          <tbody id="workers-tbody"></tbody>
+        </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── CEO Office ──────────────────────────────────────────── -->
+  <section class="tab" id="tab-ceo">
+    <h2>CEO Office — your assistant</h2>
+    <p class="dim" style="margin-bottom:14px">Your <b>CEO Assistant</b> reports to you. It drafts executive reports from live office data, broadcasts your notices to the staff, and pushes build alerts to Discord / WhatsApp.</p>
+    <div class="grid">
+      <div>
+        <div class="card" id="ceo-identity">
+          <h4><b>Assistant</b> · your right hand</h4>
+          <div id="ceo-who" class="kv"></div>
+          <div id="ceo-bridges" style="margin-top:10px"></div>
+        </div>
+        <div class="card">
+          <h4><b>CEO → office</b> · report & notices</h4>
+          <label>Ask for a report (optional focus)</label>
+          <input type="text" id="ceo-question" placeholder="e.g. what needs my attention today?">
+          <div class="row" style="margin-top:8px">
+            <button class="btn primary" id="ceo-report-btn" onclick="api.ceoReport()">📊 Generate report</button>
+            <button class="btn" onclick="api.ceoSummary()">⚡ Quick summary</button>
+          </div>
+          <label style="margin-top:14px">Broadcast a notice to staff</label>
+          <textarea id="ceo-notice" placeholder="e.g. Focus on the test stage this week — quality over speed."></textarea>
+          <label>Audience</label>
+          <select id="ceo-audience">
+            <option value="all">Everyone</option>
+            <option value="division">One division…</option>
+            <option value="worker">One worker…</option>
+          </select>
+          <select id="ceo-target" style="display:none"></select>
+          <div class="row" style="margin-top:8px">
+            <button class="btn primary" onclick="api.ceoNotice()">📣 Send notice</button>
+            <span class="faint">appended to every target's NOTICE.md</span>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="card" id="ceo-report-card">
+          <h4><b>Latest report</b></h4>
+          <div id="ceo-report" class="dim">No report yet — ask the assistant above.</div>
+        </div>
+        <div class="card">
+          <h4><b>Notices you sent</b></h4>
+          <div id="ceo-notices" class="dim">none yet</div>
+        </div>
+        <div class="card">
+          <h4><b>Report archive</b> · runs/ceo/</h4>
+          <div id="ceo-reports" class="dim">none yet</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── New Build ───────────────────────────────────────────── -->
+  <section class="tab" id="tab-new">
+    <h2>Build Questionnaire</h2>
+    <p class="dim" style="margin-bottom:14px">Describe the app in <b>one short goal</b>. The office expands it into Plan → Build → Review → Test → Deploy, with evaluation and a local preview when it ships.</p>
+    <div class="grid">
+      <div class="card">
+        <h4><b>1 · The goal</b></h4>
+        <label>App name</label>
+        <input type="text" id="nb-name" placeholder="e.g. expense-tracker">
+        <label>Short goal (what should it do?)</label>
+        <textarea id="nb-goal" placeholder="e.g. A CLI that tracks monthly expenses, splits them by category and prints a summary report. Node, no external dependencies."></textarea>
+        <label>Stack (optional)</label>
+        <input type="text" id="nb-stack" placeholder="node · python · static …">
+      </div>
+      <div class="card">
+        <h4><b>2 · Assignment</b></h4>
+        <label>Division (which team owns it?)</label>
+        <select id="nb-div"></select>
+        <label>Model (optional — override the picked worker's model)</label>
+        <select id="nb-model"><option value="">(worker default)</option></select>
+        <label>Stages to run</label>
+        <div class="chips" id="nb-stages"></div>
+        <div class="hint">Un-check a stage to skip it (e.g. drop "plan" for a template build).</div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:14px">
+      <div class="row">
+        <button class="btn primary" style="font-size:14px; padding:10px 22px" onclick="api.submitBuild()">🚀 Start the pipeline</button>
+        <span class="faint">queued → workers pick it up within seconds</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Jobs ────────────────────────────────────────────────── -->
+  <section class="tab" id="tab-jobs">
+    <h2>Jobs & Pipeline</h2>
+    <div id="jobs-list"></div>
+  </section>
+
+  <!-- ── Evaluation ──────────────────────────────────────────── -->
+  <section class="tab" id="tab-eval">
+    <h2>Evaluation</h2>
+    <div class="grid" style="grid-template-columns: 320px 1fr">
+      <div class="card">
+        <h4><b>Gate settings</b></h4>
+        <label>Score threshold (0–100)</label>
+        <input type="number" id="set-threshold" min="0" max="100">
+        <label>Retries per stage</label>
+        <input type="number" id="set-retries" min="0" max="10">
+        <label>Preview port base</label>
+        <input type="number" id="set-preview" min="1024" max="65535">
+        <label>Parallel builds</label>
+        <input type="number" id="set-parallel" min="1" max="16">
+        <div class="row" style="margin-top:10px">
+          <button class="btn primary" onclick="api.saveSettings()">save</button>
+          <span class="faint">applies immediately</span>
+        </div>
+        <div class="hint" style="margin-top:10px">A stage passes when no hard auto-check fails <b>and</b> the AI rubric score ≥ threshold. Below that → retry with critique → then <span class="badge b-needs-review">needs-review</span> for a human.</div>
+      </div>
+      <div class="card">
+        <h4><b>Recent evaluations</b> · one row per stage attempt, newest first</h4>
+        <div style="max-height:65vh; overflow:auto">
+        <table>
+          <thead><tr><th>when</th><th>build</th><th>stage</th><th>worker</th><th>score</th><th>result</th><th>critique</th></tr></thead>
+          <tbody id="eval-tbody"></tbody>
+        </table>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div class="toast-zone" id="toasts"></div>
+
+<dialog id="dlg"><div class="dlg" id="dlg-body"></div></dialog>
+
+<script>
+(() => {
+'use strict'
+
+const KEY_STORE = 'bp.office.key'
+const STAGES = ['plan', 'build', 'review', 'test', 'deploy']
+const STAGE_LABELS = { plan: 'Plan', build: 'Build', review: 'Review', test: 'Test', deploy: 'Deploy' }
+
+const $ = id => document.getElementById(id)
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e }
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
+
+let key = localStorage.getItem(KEY_STORE) || ''
+function requireKey () {
+  if (key) return true
+  const k = prompt('Enter the office key (config/server.password):')
+  if (k) { key = k.trim(); localStorage.setItem(KEY_STORE, key); return true }
+  toast('Office key required for changes', 'err')
+  return false
+}
+
+async function api (path, opts = {}) {
+  const headers = { ...(opts.headers || {}) }
+  if (opts.body) headers['Content-Type'] = 'application/json'
+  if (key) headers['x-office-key'] = key
+  const res = await fetch(path, { ...opts, headers })
+  if (!res.ok) {
+    let msg = `${path} → ${res.status}`
+    try { const j = await res.json(); if (j.error) msg = j.error } catch {}
+    if (res.status === 401) { toast('Office key rejected — click 🔑 to update it', 'err'); key = ''; localStorage.removeItem(KEY_STORE) }
+    throw new Error(msg)
+  }
+  return res.json()
+}
+
+function toast (msg, type = '') {
+  const t = el('div', 'toast ' + type, msg)
+  $('toasts').appendChild(t)
+  setTimeout(() => t.remove(), 4200)
+}
+
+// ── tabs ──────────────────────────────────────────────────────
+const tabButtons = [...document.querySelectorAll('nav.tabs button')]
+function showTab (name) {
+  tabButtons.forEach(b => b.classList.toggle('active', b.dataset.tab === name))
+  document.querySelectorAll('section.tab').forEach(s => s.classList.toggle('active', s.id === 'tab-' + name))
+  if (name === 'workers') refreshWorkers()
+  if (name === 'jobs') refreshJobs()
+  if (name === 'eval') refreshEval()
+  if (name === 'ceo') refreshCeo()
+}
+tabButtons.forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)))
+showTab('cam')
+$('keybtn').addEventListener('click', () => { const k = prompt('Office key (config/server.password):'); if (k) { key = k.trim(); localStorage.setItem(KEY_STORE, key); toast('key saved') } })
+
+// ── state ─────────────────────────────────────────────────────
+let DATA = { workers: [], divisions: [], roles: [], builds: [], evaluations: [], models: [], settings: {} }
+
+async function refreshBase () {
+  try {
+    const [h, w, m] = await Promise.all([api('/health'), api('/api/workers'), api('/api/models')])
+    Object.assign(DATA, w, { models: m.models, health: h })
+    const on = $('conn')
+    on.className = 'on'; on.textContent = `● online · ${DATA.workers.length} workers · ${h.active}/${h.workers} busy`
+    $('cnt-workers').textContent = DATA.workers.length
+  } catch (e) {
+    const on = $('conn')
+    on.className = 'off'; on.textContent = '○ offline ' + (e.message || '')
+  }
+}
+setInterval(refreshBase, 3000)
+refreshBase()
+
+// ── Workers tab ───────────────────────────────────────────────
+function refreshWorkers (soft) {
+  if (!soft) refreshBase()
+  const tbody = $('workers-tbody')
+  tbody.innerHTML = ''
+  if (!DATA.workers.length) { tbody.appendChild(el('tr')).appendChild(el('td', 'empty', 'no workers yet — add one below')).colSpan = 6; }
+  for (const w of DATA.workers) {
+    const tr = el('tr')
+    const div = el('td'); div.innerHTML = `<b>${esc(w.name)}</b><div class="faint">${esc(w.id)}</div>`
+    const role = el('td', 'mono-sm', w.role + (w.description ? '' : ''))
+    const division = el('td', 'mono-sm', w.division || 'core')
+    const model = el('td', 'mono-sm', modelRef(w))
+    const st = el('td'); st.appendChild(statBadge(w.status === 'paused' ? 'paused' : 'active'))
+    const act = el('td')
+    const r1 = el('div', 'row')
+    const b1 = el('button', 'mini', w.status === 'paused' ? '▶ resume' : '❚❚ pause')
+    b1.onclick = () => workerAction(w, w.status === 'paused' ? 'resume' : 'pause')
+    const b2 = el('button', 'mini', 'edit'); b2.onclick = () => workerForm(w)
+    const b3 = el('button', 'mini danger', 'delete'); b3.onclick = () => removeWorker(w)
+    r1.append(b1, b2, b3); act.appendChild(r1)
+    tr.append(div, role, division, model, st, act)
+    tbody.appendChild(tr)
+  }
+  renderDivisions()
+  renderRoles()
+}
+function modelRef (w) { return `${w.model}${w.variant && w.variant !== 'default' ? '#' + w.variant : ''}` }
+function statBadge (st) {
+  const b = el('span', 'badge b-' + st, st)
+  if (st === 'active') { b.className = 'badge b-done'; b.textContent = 'active' }
+  return b
+}
+async function workerAction (w, action) {
+  try { await api(`/api/workers/${w.id}/action`, { method: 'POST', body: JSON.stringify({ action }) }); toast(`${w.name} ${action}d`, 'ok'); refreshWorkers() }
+  catch (e) { toast(e.message, 'err') }
+}
+async function removeWorker (w) {
+  if (!confirm(`Delete worker "${w.name}"? Their workspace folder is kept on disk.`)) return
+  try { await api(`/api/workers/${w.id}`, { method: 'DELETE' }); toast('worker deleted', 'ok'); refreshWorkers() }
+  catch (e) { toast(e.message, 'err') }
+}
+
+function renderDivisions () {
+  const tbody = $('div-tbody'); tbody.innerHTML = ''
+  if (!DATA.divisions.length) return
+  for (const d of DATA.divisions) {
+    const tr = el('tr')
+    const id = el('td', 'mono-sm', d.id)
+    const name = el('td'); name.innerHTML = `${esc(d.name)}${d.description ? `<div class="faint">${esc(d.description)}</div>` : ''}`
+    const act = el('td')
+    const r = el('div', 'row')
+    const e = el('button', 'mini', 'edit'); e.onclick = () => divisionForm(d)
+    const x = el('button', 'mini danger', '✕'); x.onclick = () => removeDivision(d)
+    r.append(e, x); act.appendChild(r)
+    tr.append(id, name, act); tbody.appendChild(tr)
+  }
+}
+
+function renderRoles () {
+  const box = $('roles-list'); box.innerHTML = ''
+  if (!DATA.roles.length) { box.textContent = 'no roles defined'; return }
+  for (const r of DATA.roles) {
+    const line = el('div', '', '')
+    line.style.cssText = 'padding:6px 0;border-bottom:1px solid var(--line);'
+    const stages = (r.stages && r.stages.length ? r.stages : STAGES).map(s => `<span class="stage-pill done">${STAGE_LABELS[s] || s}</span>`).join('')
+    line.innerHTML = `<b>${esc(r.name)}</b> <span class="faint">${esc(r.id)}</span> · agent <span class="dim">${esc(r.agent || 'general')}</span>${r.scoreStages ? ' · <span class="badge b-running">score</span>' : ''}<div class="chips" style="margin:4px 0">${stages}</div>`
+    const bar = el('div', 'row')
+    const e = el('button', 'mini', 'edit'); e.onclick = () => roleForm(r)
+    const x = el('button', 'mini danger', '✕'); x.onclick = () => removeRole(r)
+    bar.append(e, x); line.appendChild(bar)
+    box.appendChild(line)
+  }
+}
+
+// ── dialogs (workers / roles / divisions) ─────────────────────
+const dlg = $('dlg'), dlgBody = $('dlg-body')
+function openDlg (html) { dlgBody.innerHTML = html; dlg.showModal() }
+function closeDlg () { dlg.close() }
+
+function workerForm (w) {
+  const divisions = DATA.divisions.map(d => `<option ${w && w.division === d.id ? 'selected' : ''}>${d.id}</option>`).join('')
+  const roles = DATA.roles.map(r => `<option value="${esc(r.id)}" ${w && w.role === r.id ? 'selected' : ''}>${esc(r.name)} (${esc(r.id)})</option>`).join('')
+  const models = DATA.models.map(m => `<option ${w && w.model === m ? 'selected' : ''}>${esc(m)}</option>`).join('')
+  openDlg(`
+    <h3>${w ? 'Edit worker' : 'Add worker'}</h3>
+    <label>Name</label><input type="text" id="f-name" value="${esc(w?.name || '')}">
+    <label>Division</label><select id="f-div">${divisions}</select>
+    <label>Role</label><select id="f-role">${roles}</select>
+    <label>Model ref</label>
+    <select id="f-model"><option value="">(pick)</option>${models}<option value="__custom__">✎ custom ref…</option></select>
+    <input type="text" id="f-model-custom" placeholder="provider/model#variant" style="margin-top:6px;display:none">
+    <label>Variant</label>
+    <select id="f-variant">${['medium', 'high', 'low', 'default'].map(v => `<option ${w && w.variant === v ? 'selected' : ''}>${v}</option>`).join('')}</select>
+    <label>Description</label><input type="text" id="f-desc" value="${esc(w?.description || '')}">
+    <div class="actions">
+      <button class="btn ghost" onclick="closeDlg()">cancel</button>
+      <button class="btn primary" onclick="submitWorker('${esc(w?.id || '')}')">save worker</button>
+    </div>`)
+  const sel = $('f-model'); const custom = $('f-model-custom')
+  sel.addEventListener('change', () => { custom.style.display = sel.value === '__custom__' ? 'block' : 'none' })
+}
+async function submitWorker (id) {
+  const modelSel = $('f-model')
+  const model = modelSel.value === '__custom__' ? $('f-model-custom').value.trim() : modelSel.value
+  const body = {
+    name: $('f-name').value.trim(), division: $('f-div').value, role: $('f-role').value,
+    model, variant: $('f-variant').value, description: $('f-desc').value.trim()
+  }
+  if (!body.name || !body.model) { toast('name and model are required', 'err'); return }
+  try {
+    if (id) await api(`/api/workers/${id}`, { method: 'PUT', body: JSON.stringify(body) })
+    else await api('/api/workers', { method: 'POST', body: JSON.stringify(body) })
+    closeDlg(); toast('worker saved', 'ok'); refreshWorkers()
+  } catch (e) { toast(e.message, 'err') }
+}
+
+function roleForm (r) {
+  const stages = STAGES.map(s => `<span class="chip ${!r || !r.stages || r.stages.includes(s) ? 'on' : ''}" data-st="${s}" onclick="this.classList.toggle('on')">${STAGE_LABELS[s]}</span>`).join('')
+  openDlg(`
+    <h3>${r ? 'Edit role' : 'New role'}</h3>
+    <label>Role name</label><input type="text" id="r-name" value="${esc(r?.name || '')}">
+    <label>Agent (OpenCode agent key)</label><input type="text" id="r-agent" value="${esc(r?.agent || 'general')}" placeholder="builder · reviewer · general …">
+    <label>SDLC stages it handles</label><div class="chips">${stages}</div>
+    <div class="row" style="margin-top:8px"><span class="faint">scorer</span><span class="chip ${r?.scoreStages ? 'on' : ''}" id="r-score" onclick="this.classList.toggle('on')">evaluates stages (0–100)</span></div>
+    <label>Description</label><input type="text" id="r-desc" value="${esc(r?.description || '')}">
+    <div class="actions">
+      <button class="btn ghost" onclick="closeDlg()">cancel</button>
+      <button class="btn primary" onclick="submitRole('${esc(r?.id || '')}')">save role</button>
+    </div>`)
+}
+async function submitRole (id) {
+  const picks = [...document.querySelectorAll('#dlg .chips [data-st]')].filter(c => c.classList.contains('on')).map(c => c.dataset.st)
+  const body = { name: $('r-name').value.trim(), agent: $('r-agent').value.trim() || 'general', stages: picks, description: $('r-desc').value.trim(), scoreStages: $('r-score').classList.contains('on') }
+  if (!body.name) { toast('role name required', 'err'); return }
+  try {
+    if (id) await api(`/api/roles/${id}`, { method: 'PUT', body: JSON.stringify(body) })
+    else await api('/api/roles', { method: 'POST', body: JSON.stringify(body) })
+    closeDlg(); toast('role saved', 'ok'); refreshWorkers()
+  } catch (e) { toast(e.message, 'err') }
+}
+async function removeRole (r) {
+  if (!confirm(`Delete role "${r.name}"? Workers holding it revert to their fallback chain.`)) return
+  try { await api(`/api/roles/${r.id}`, { method: 'DELETE' }); toast('role deleted', 'ok'); refreshWorkers() }
+  catch (e) { toast(e.message, 'err') }
+}
+
+function divisionForm (d) {
+  openDlg(`
+    <h3>${d ? 'Edit division' : 'New division'}</h3>
+    <label>Name</label><input type="text" id="d-name" value="${esc(d?.name || '')}">
+    <label>Description</label><input type="text" id="d-desc" value="${esc(d?.description || '')}">
+    <label>Accent color</label><input type="text" id="d-color" value="${esc(d?.color || '#7dd3fc')}" placeholder="#7dd3fc">
+    <div class="actions">
+      <button class="btn ghost" onclick="closeDlg()">cancel</button>
+      <button class="btn primary" onclick="submitDivision('${esc(d?.id || '')}')">save division</button>
+    </div>`)
+}
+async function submitDivision (id) {
+  const body = { name: $('d-name').value.trim(), description: $('d-desc').value.trim(), color: $('d-color').value.trim() }
+  if (!body.name) { toast('division name required', 'err'); return }
+  try {
+    if (id) await api(`/api/divisions/${id}`, { method: 'PUT', body: JSON.stringify(body) })
+    else await api('/api/divisions', { method: 'POST', body: JSON.stringify(body) })
+    closeDlg(); toast('division saved', 'ok'); refreshWorkers()
+  } catch (e) { toast(e.message, 'err') }
+}
+async function removeDivision (d) {
+  if (!confirm(`Delete division "${d.name}"? Its builds and folders stay.`)) return
+  try { await api(`/api/divisions/${d.id}`, { method: 'DELETE' }); toast('division deleted', 'ok'); refreshWorkers() }
+  catch (e) { toast(e.message, 'err') }
+}
+
+// expose dialog helpers to inline onclick handlers
+window.closeDlg = closeDlg
+window.workerForm = workerForm; window.submitWorker = submitWorker
+window.roleForm = roleForm; window.submitRole = submitRole
+window.removeRole = removeRole
+window.divisionForm = divisionForm; window.submitDivision = submitDivision
+
+// ── New Build tab ─────────────────────────────────────────────
+function fillDivisions () {
+  const sel = $('nb-div'); sel.innerHTML = DATA.divisions.map(d => `<option value="${esc(d.id)}">${esc(d.name)} (${esc(d.id)})</option>`).join('')
+}
+function fillModels () {
+  const sel = $('nb-model')
+  sel.innerHTML = '<option value="">(worker default)</option>' + DATA.models.map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join('')
+  const box = $('nb-stages'); box.innerHTML = ''
+  for (const s of STAGES) {
+    const c = el('span', 'chip on', STAGE_LABELS[s]); c.dataset.st = s
+    c.onclick = () => c.classList.toggle('on')
+    box.appendChild(c)
+  }
+}
+window.api = {
+  async submitBuild () {
+    if (!requireKey()) return
+    const name = $('nb-name').value.trim() || $('nb-goal').value.trim().slice(0, 30).toLowerCase().replace(/[^a-z0-9]+/g, '-').trim('-') || 'app'
+    const stages = [...document.querySelectorAll('#nb-stages .chip.on')].map(c => c.dataset.st)
+    const body = {
+      name,
+      description: $('nb-goal').value.trim(),
+      stack: $('nb-stack').value.trim(),
+      division: $('nb-div').value,
+      model: $('nb-model').value || '',
+      stages: stages.length === STAGES.length ? undefined : stages
+    }
+    if (!body.description) { toast('describe the short goal first', 'err'); return }
+    try {
+      const r = await api('/api/builds', { method: 'POST', body: JSON.stringify(body) })
+      toast(`build "${body.name}" queued (${body.division})`, 'ok')
+      $('nb-goal').value = ''; $('nb-stack').value = ''; $('nb-name').value = ''
+      showTab('jobs')
+    } catch (e) { toast(e.message, 'err') }
+  },
+  async divisionAdd () {
+    if (!requireKey()) return
+    const name = $('new-div-name').value.trim()
+    if (!name) { toast('division name required', 'err'); return }
+    try { await api('/api/divisions', { method: 'POST', body: JSON.stringify({ name }) }); $('new-div-name').value = ''; toast('division added', 'ok'); refreshWorkers() }
+    catch (e) { toast(e.message, 'err') }
+  },
+  async saveSettings () {
+    if (!requireKey()) return
+    const body = {
+      evalThreshold: parseInt($('set-threshold').value, 10),
+      evalRetries: parseInt($('set-retries').value, 10),
+      previewBase: parseInt($('set-preview').value, 10),
+      parallel: parseInt($('set-parallel').value, 10)
+    }
+    try { await api('/api/settings', { method: 'PUT', body: JSON.stringify(body) }); toast('settings saved — applies immediately', 'ok'); refreshEval() }
+    catch (e) { toast(e.message, 'err') }
+  },
+  async ceoReport () { return ceoReport('report') },
+  async ceoSummary () { return ceoReport('summary') },
+  async ceoNotice () {
+    if (!requireKey()) return
+    const text = $('ceo-notice').value.trim()
+    if (!text) { toast('write the notice first', 'err'); return }
+    const audience = $('ceo-audience').value
+    const body = { text, audience }
+    if (audience === 'division') body.division = $('ceo-target').value
+    if (audience === 'worker') body.worker = $('ceo-target').value
+    try {
+      const r = await api('/api/ceo/notice', { method: 'POST', body: JSON.stringify(body) })
+      $('ceo-notice').value = ''
+      toast(`notice sent to ${r.notice.deliveredTo.length} worker(s)`, 'ok')
+      refreshCeo()
+    } catch (e) { toast(e.message, 'err') }
+  }
+}
+
+// ── CEO tab ───────────────────────────────────────────────────
+/** Minimal, safe markdown → HTML for the assistant's report. */
+function mdToHtml (md) {
+  const inline = s => esc(s)
+    .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+    .replace(/`([^`]+)`/g, '<code style="background:var(--panel2);padding:1px 4px;border-radius:3px">$1</code>')
+  const out = []
+  let inList = false
+  for (const raw of String(md || '').split('\n')) {
+    const line = raw.trimEnd()
+    const h = line.match(/^(#{1,4})\s+(.*)$/)
+    const li = line.match(/^\s*[-*]\s+(.*)$/)
+    if (li) { if (!inList) { out.push('<ul>'); inList = true } out.push(`<li>${inline(li[1])}</li>`); continue }
+    if (inList) { out.push('</ul>'); inList = false }
+    if (h) out.push(`<h3>${inline(h[2])}</h3>`)
+    else if (!line.trim()) out.push('')
+    else out.push(`<div>${inline(line)}</div>`)
+  }
+  if (inList) out.push('</ul>')
+  return out.join('\n')
+}
+
+async function ceoReport (kind) {
+  if (!requireKey()) return
+  const btn = $('ceo-report-btn')
+  const label = btn.textContent
+  btn.textContent = '⏳ assistant working…'
+  btn.disabled = true
+  $('ceo-report').innerHTML = '<span class="dim">The CEO Assistant is reading the office data…</span>'
+  try {
+    const body = { kind }
+    const q = $('ceo-question').value.trim()
+    if (q) body.question = q
+    const r = await api('/api/ceo/report', { method: 'POST', body: JSON.stringify(body) })
+    $('ceo-report').innerHTML = mdToHtml(r.report)
+    toast('report ready', 'ok')
+    refreshCeo()
+  } catch (e) {
+    $('ceo-report').innerHTML = `<span class="critique">⚠ ${esc(e.message)}</span>`
+    toast(e.message, 'err')
+  } finally {
+    btn.textContent = label
+    btn.disabled = false
+  }
+}
+
+function fillCeoTargets () {
+  const sel = $('ceo-target')
+  const kind = $('ceo-audience').value
+  if (kind === 'all') { sel.style.display = 'none'; return }
+  sel.style.display = 'block'
+  const opts = kind === 'division'
+    ? DATA.divisions.map(d => ({ v: d.id, l: `${d.name} (${d.id})` }))
+    : DATA.workers.map(w => ({ v: w.id, l: `${w.name} — ${w.role}` }))
+  const prev = sel.value
+  sel.innerHTML = opts.map(o => `<option value="${esc(o.v)}">${esc(o.l)}</option>`).join('')
+  if (prev) sel.value = prev
+}
+
+async function refreshCeo (soft) {
+  if (!soft) { try { DATA.ceo = await api('/api/ceo') } catch {} }
+  const c = DATA.ceo
+  if (!c) return
+  const who = $('ceo-who')
+  const a = c.assistant
+  who.innerHTML = a
+    ? `<b>${esc(a.name)}</b> <span class="faint">(${esc(a.id)})</span><br>` +
+      `<b>agent</b> ${esc(c.agent)}<br>` +
+      `<b>model</b> ${esc(c.model)}<br>` +
+      `<b>status</b> ${a.status === 'paused' ? '<span class="badge b-paused">paused</span>' : '<span class="badge b-done">active</span>'}`
+    : `<span class="critique">no CEO Assistant hired — add one in Office Staff (role “CEO Assistant”) to get reports.</span>`
+  const b = c.bridges || {}
+  $('ceo-bridges').innerHTML =
+    `<b>notifications</b> ` +
+    `<span class="badge ${b.discord ? 'b-done' : 'b-cancelled'}">discord ${b.discord ? 'on' : 'off'}</span> ` +
+    `<span class="badge ${b.whatsapp ? 'b-done' : 'b-cancelled'}">whatsapp ${b.whatsapp ? 'on' : 'off'}</span>` +
+    `<div class="hint">Set a notify channel id (Discord) or your JID (WhatsApp) in the wizard to get build alerts in chat.</div>`
+
+  const nb = $('ceo-notices')
+  nb.innerHTML = ''
+  if (!(c.notices || []).length) { nb.textContent = 'none yet' }
+  for (const n of c.notices.slice(0, 12)) {
+    const item = el('div', 'notice-item')
+    item.innerHTML = `<div class="meta">${esc((n.at || '').replace('T', ' ').slice(0, 19))} · to ${esc(n.audience)} · ${(n.deliveredTo || []).length} recipient(s)</div><div>${esc(n.text)}</div>`
+    nb.appendChild(item)
+  }
+  const rb = $('ceo-reports')
+  rb.innerHTML = ''
+  if (!(c.reports || []).length) { rb.textContent = 'none yet' }
+  for (const r of c.reports.slice(0, 12)) {
+    const item = el('div', 'notice-item')
+    item.innerHTML = `<div class="meta">${esc((r.at || '').replace('T', ' ').slice(0, 19))}</div><div>${esc(r.title)}</div>`
+    rb.appendChild(item)
+  }
+  fillCeoTargets()
+}
+$('ceo-audience').addEventListener('change', fillCeoTargets)
+
+// ── Jobs tab ──────────────────────────────────────────────────
+async function refreshJobs (soft) {
+  if (!soft) { try { const j = await api('/api/builds'); DATA.builds = j.builds } catch {} }
+  const list = $('jobs-list'); list.innerHTML = ''
+  if (!DATA.builds.length) { list.appendChild(el('div', 'empty', 'no builds yet — drop a folder in a worker inbox, or use the New Build tab')) }
+  for (const j of DATA.builds.slice().reverse()) {
+    const card = el('div', 'card')
+    const head = el('div', 'row')
+    head.style.cssText = 'margin-bottom:8px'
+    const title = el('div')
+    title.innerHTML = `<b>${esc(j.name)}</b> <span class="faint">${esc(j.id)}</span> <span class="dim">· ${esc(j.division || 'core')}</span>${j.source ? ` <span class="faint">· ${esc(j.source)}</span>` : ''}`
+    head.append(title)
+    head.appendChild(stageBadge(j.status))
+    const sub = el('div', 'row')
+    sub.append(stagePills(j))
+    if (j.preview) { const a = el('a', '', '⤴ preview'); a.href = j.preview.url; a.target = '_blank'; sub.appendChild(a) }
+    if (j.error) { const e = el('div', 'critique', '⚠ ' + j.error) ; card.appendChild(e) }
+    card.appendChild(head); card.appendChild(sub)
+    const bar = el('div', 'row')
+    const acts = actionsFor(j)
+    for (const [label, cls, fn] of acts) { const b = el('button', 'mini ' + cls, label); b.onclick = () => jobAction(j, fn); bar.appendChild(b) }
+    const more = el('button', 'mini', 'details ▾'); more.onclick = () => { const d = $('det-' + j.id); if (d) { d.style.display = d.style.display === 'none' ? 'block' : 'none' } }
+    bar.appendChild(more)
+    card.appendChild(bar)
+    const det = el('div', '', '')
+    det.id = 'det-' + j.id; det.style.cssText = 'display:none;margin-top:10px;border-top:1px solid var(--line);padding-top:8px'
+    if (j.startedAt) det.appendChild(el('div', 'kv', `<b>started</b> ${esc(j.startedAt.replace('T', ' ').slice(0, 19))}`))
+    if (j.finishedAt) det.appendChild(el('div', 'kv', `<b>finished</b> ${esc(j.finishedAt.replace('T', ' ').slice(0, 19))}`))
+    if (j.activeWorker) det.appendChild(el('div', 'kv', `<b>active worker</b> ${esc(j.activeWorker)}`))
+    if (j.waitingStage) det.appendChild(el('div', 'kv', `<b>waiting on</b> ${esc(STAGE_LABELS[j.waitingStage] || j.waitingStage)}`))
+    const evs = (j.evaluations || []).slice().reverse()
+    if (evs.length) {
+      det.appendChild(el('h3', '', 'evaluations'))
+      for (const e of evs.slice(0, 12)) det.appendChild(evalRow(e))
+    }
+    if (!evs.length) det.appendChild(el('div', 'dim', 'no evaluations yet'))
+    card.appendChild(det)
+    list.appendChild(card)
+  }
+  $('cnt-jobs').textContent = DATA.builds.filter(b => ['queued', 'running', 'needs-review', 'paused'].includes(b.status)).length
+}
+function stageBadge (st) { return el('span', 'badge b-' + (st === 'active' ? 'done' : st), st) }
+function stagePills (j) {
+  const wrap = el('div', 'stages')
+  const stages = (j.stages && j.stages.length ? j.stages : STAGES)
+  for (const s of stages) {
+    const st = (j.stageStatus || {})[s]
+    const cls = !st ? '' : st === 'done' ? 'done' : st
+    const c = el('span', 'stage-pill ' + (s === j.stage && ['running', 'needs-review'].includes(j.status) ? 'now ' : '') + cls, STAGE_LABELS[s] || s)
+    wrap.appendChild(c)
+  }
+  return wrap
+}
+function actionsFor (j) {
+  const A = []
+  const push = (label, cls, fn) => A.push([label, cls, fn])
+  switch (j.status) {
+    case 'queued': push('❚❚ pause', '', 'pause'); push('✕ cancel', 'danger', 'cancel'); break
+    case 'running': push('❚❚ pause', '', 'pause'); push('✕ cancel', 'danger', 'cancel'); break
+    case 'paused': push('▶ resume', 'ok', 'resume'); push('↻ retry', '', 'retry'); push('✕ cancel', 'danger', 'cancel'); break
+    case 'needs-review': push('✓ approve', 'ok', 'approve'); push('↻ retry', '', 'retry'); push('✕ reject', 'danger', 'reject'); push('❚❚ pause', '', 'pause'); break
+    case 'failed': push('↻ retry', '', 'retry'); push('✕ cancel', 'danger', 'cancel'); break
+    case 'cancelled': push('↻ retry', '', 'retry'); break
+  }
+  return A
+}
+async function jobAction (j, action) {
+  if (!requireKey()) return
+  try {
+    await api(`/api/builds/${j.id}/action`, { method: 'POST', body: JSON.stringify({ action }) })
+    toast(`${j.name}: ${action}`, 'ok'); refreshJobs()
+  } catch (e) { toast(e.message, 'err') }
+}
+
+// ── Evaluation tab ────────────────────────────────────────────
+let showingEval = 0
+async function refreshEval (soft) {
+  if (!soft) {
+    try {
+      const [ev, st] = await Promise.all([api('/api/evaluations'), api('/api/settings')])
+      DATA.evaluations = ev.evaluations; DATA.settings = st
+      $('set-threshold').value = st.evalThreshold; $('set-retries').value = st.evalRetries
+      $('set-preview').value = st.previewBase; $('set-parallel').value = st.parallel
+    } catch {}
+  }
+  const tbody = $('eval-tbody'); tbody.innerHTML = ''
+  const rows = DATA.evaluations
+  if (!rows.length) { tbody.appendChild(el('tr')).appendChild(el('td', 'empty', 'no evaluations yet')).colSpan = 7; return }
+  $('cnt-eval').textContent = rows.length
+  for (const e of rows.slice(0, showingEval || 60)) {
+    const tr = el('tr')
+    tr.appendChild(el('td', 'mono-sm', (e.at || '').replace('T', ' ').slice(5, 19)))
+    tr.appendChild(el('td', '', `<b>${esc(e.jobName)}</b><div class="faint">${esc(e.jobId)}</div>`))
+    tr.appendChild(el('td', '', STAGE_LABELS[e.stage] || e.stage || (e.action || '')))
+    tr.appendChild(el('td', 'mono-sm', e.worker || (e.skipped ? '—' : 'scorer')))
+    const score = el('td'); score.appendChild(scoreSpan(e.aiScore))
+    const res = el('td')
+    if (e.skipped) res.appendChild(el('span', 'badge b-cancelled', 'skipped'))
+    else if (e.action === 'approved') res.appendChild(el('span', 'badge b-needs-review', 'approved'))
+    else if (e.error) res.appendChild(el('span', 'badge b-failed', 'error'))
+    else if (e.passed) res.appendChild(el('span', 'badge b-done', 'pass'))
+    else res.appendChild(el('span', 'badge b-failed', 'fail'))
+    tr.appendChild(res)
+    const crit = el('td')
+    crit.innerHTML = `<div class="critique">${esc(e.critique || '')}</div><div class="faint">attempt ${e.attempt ?? 0} · ${(e.autoChecks || []).filter(c => c.pass).length}/${(e.autoChecks || []).length} auto-checks</div>`
+    tr.appendChild(crit)
+    tbody.appendChild(tr)
+  }
+}
+function scoreSpan (s) {
+  if (s === null || s === undefined) return el('span', 'faint', '—')
+  const cls = s >= 70 ? 'hi' : s >= 50 ? 'mid' : 'lo'
+  return el('span', 'score ' + cls, s)
+}
+function evalRow (e) {
+  const box = el('div', 'card compact')
+  const head = el('div', 'row')
+  head.appendChild(el('span', 'badge ' + (e.passed ? 'b-done' : e.error ? 'b-failed' : e.skipped ? 'b-cancelled' : 'b-failed'), e.passed ? 'pass' : e.error ? 'error' : e.skipped ? 'skipped' : 'fail'))
+  head.appendChild(el('span', '', STAGE_LABELS[e.stage] || e.stage))
+  head.appendChild(el('span', 'mono-sm', 'attempt ' + (e.attempt ?? 0) + ' · ' + (e.worker || 'no worker')))
+  head.appendChild(el('span', 'faint', (e.at || '').replace('T', ' ').slice(5, 19)))
+  head.appendChild(scoreSpan(e.aiScore))
+  box.appendChild(head)
+  if (e.critique) box.appendChild(el('div', 'critique', e.critique))
+  const checks = (e.autoChecks || []).map(c => {
+    const mark = c.pass ? 'ok' : c.must === false ? 'inf' : 'no'
+    return `<div class="check"><span class="${mark}">${c.pass ? '✓' : c.must === false ? '·' : '✕'}</span><span class="dim">${esc(c.check)}</span><span class="faint">— ${esc(c.detail)}</span></div>`
+  }).join('')
+  if (checks) box.appendChild(el('div', '', checks))
+  if (e.replyPreview) box.appendChild(el('div', 'mono-sm', '… ' + esc(e.replyPreview)))
+  return box
+}
+
+// ── placeholder wiring for the tab polls ──────────────────────
+setInterval(() => { if ($('tab-jobs').classList.contains('active')) refreshJobs(true) }, 3000)
+setInterval(() => { if ($('tab-eval').classList.contains('active')) refreshEval(true) }, 3000)
+// the staff list is CRUD-managed, so keep it live from the server
+setInterval(() => { if ($('tab-workers').classList.contains('active')) refreshWorkers() }, 5000)
+setInterval(() => { if ($('tab-ceo').classList.contains('active')) refreshCeo(true) }, 10000)
+
+// initial fills
+function init () {
+  fillDivisions(); fillModels(); fillCeoTargets(); refreshJobs(true); refreshEval(true); refreshWorkers(true); refreshCeo()
+}
+refreshBase().then(init)
+})()
+</script>
+</body>
+</html>

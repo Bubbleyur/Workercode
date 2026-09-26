@@ -1,0 +1,35 @@
+{
+  "name": "bigpickle-vps-builder",
+  "version": "2.0.0",
+  "description": "Big Pickle — Digital Workers: a 24/7 agent office that runs Plan → Build → Review → Test → Deploy apps from short goals, with evaluation gates and a control panel on localhost.",
+  "type": "module",
+  "main": "index.js",
+  "bin": {
+    "bigpickle": "index.js",
+    "bigpickle-orchestrator": "bin/orchestrator.js"
+  },
+  "scripts": {
+    "start": "node index.js",
+    "wizard": "node index.js --wizard",
+    "status": "node scripts/status.js",
+    "logs": "node scripts/logs.js",
+    "new-app": "node scripts/new-app.js",
+    "orchestrator": "node bin/orchestrator.js",
+    "9router:sync": "node scripts/9router-sync.js",
+    "bridge:discord": "node bridges/discord.js",
+    "bridge:whatsapp": "node bridges/whatsapp.js",
+    "deps:whatsapp": "npm install @whiskeysockets/baileys",
+    "install:service": "node scripts/install-service.js",
+    "uninstall:service": "node scripts/uninstall-service.js",
+    "build:publish": "node scripts/build-publish.js",
+    "pack:repo": "node scripts/pack-repo.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "optionalDependencies": {
+    "@whiskeysockets/baileys": "^6.7.0",
+    "ws": "^8.18.0"
+  },
+  "license": "MIT"
+}
