@@ -29,7 +29,8 @@ const INCLUDE = [
 const EXCLUDE = new Set([
   '.env', 'node_modules', 'build', '.git', 'workspaces', 'apps', 'runs',
   'config/settings.json', 'config/server.password', 'config/bridge-sessions.json',
-  'config/9router.models.json', 'config/whatsapp-session',
+  'config/9router.models.json', 'config/zen.models.json', 'config/custom.models.json',
+  'config/whatsapp-session',
   'tools', '.DS_Store', 'Thumbs.db'
 ])
 

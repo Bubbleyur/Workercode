@@ -7,6 +7,8 @@ config/server.password
 config/bridge-sessions.json
 config/whatsapp-session/
 config/9router.models.json
+config/zen.models.json
+config/custom.models.json
 
 # office runtime state
 runs/

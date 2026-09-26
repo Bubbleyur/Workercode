@@ -178,6 +178,7 @@
   <button data-tab="new">New Build</button>
   <button data-tab="jobs">Jobs <span class="cnt" id="cnt-jobs"></span></button>
   <button data-tab="eval">Evaluation <span class="cnt" id="cnt-eval"></span></button>
+  <button data-tab="models">Models &amp; Tools <span class="cnt" id="cnt-models"></span></button>
 </nav>
 
 <main>
@@ -354,6 +355,65 @@
       </div>
     </div>
   </section>
+
+  <!-- ── Models & Tools ────────────────────────────────────────── -->
+  <section class="tab" id="tab-models">
+    <div class="toolbar">
+      <div>
+        <h2 style="margin-bottom:2px">Models &amp; Tools — every brain, every page</h2>
+        <div class="faint" style="font-size:11px">Point the office at a gateway, sync its live model list, add any model ref by hand, and jump straight to the tool pages you need.</div>
+      </div>
+      <div class="row" style="flex:0 0 auto">
+        <button class="btn primary" onclick="modelsSync('opencode')">⟳ Sync Zen models</button>
+        <button class="btn" onclick="modelsSync('9router')">⟳ Sync 9router</button>
+        <button class="btn" onclick="refreshModels()">reload</button>
+      </div>
+    </div>
+
+    <div class="grid">
+      <!-- gateways -->
+      <div class="card">
+        <h4><b>Gateways</b> · where models come from</h4>
+        <div id="gateways"></div>
+        <div class="hint" style="margin-top:10px">Keys are stored in <span class="dim">.env</span> (and <span class="dim">config/settings.json</span>) and are never sent back to this page — only a masked preview. OpenCode Zen has a <b>free tier</b>, so a fresh office can run with no 9router account at all.</div>
+      </div>
+
+      <!-- catalog -->
+      <div class="card">
+        <h4><b>Model catalog</b> · <span id="cat-count" class="faint"></span></h4>
+        <div class="row" style="margin-bottom:8px">
+          <input type="text" id="m-search" placeholder="filter models…" style="flex:1 1 160px" oninput="renderCatalog()">
+          <select id="m-source" style="flex:0 0 130px" onchange="renderCatalog()">
+            <option value="">all sources</option>
+            <option value="zen">opencode zen</option>
+            <option value="9router">9router</option>
+            <option value="custom">custom</option>
+            <option value="builtin">builtin</option>
+          </select>
+          <label class="row" style="flex:0 0 auto; gap:6px; font-size:11px; margin:0">
+            <input type="checkbox" id="m-free" onchange="renderCatalog()"> free only
+          </label>
+        </div>
+        <div style="max-height:52vh; overflow:auto">
+          <table>
+            <thead><tr><th>model ref</th><th>source</th><th>tier</th><th></th></tr></thead>
+            <tbody id="m-tbody"></tbody>
+          </table>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <input type="text" id="m-custom" placeholder="add any ref — provider/model-id" style="flex:1 1 200px" onkeydown="if(event.key==='Enter')addCustomModel()">
+          <button class="btn primary" onclick="addCustomModel()">＋ Add model</button>
+        </div>
+        <div class="hint" style="margin-top:8px">Any ref OpenCode can resolve works here — a 9router path, an <span class="dim">opencode/</span> Zen id, or your own local provider. Custom entries are marked <span class="badge b-queued">custom</span> and can be removed.</div>
+      </div>
+    </div>
+
+    <!-- tool pages -->
+    <div class="card">
+      <h4><b>Tool pages</b> · one click to anything this office depends on</h4>
+      <div id="tool-links"></div>
+    </div>
+  </section>
 </main>
 
 <div class="toast-zone" id="toasts"></div>
@@ -410,21 +470,24 @@ function showTab (name) {
   if (name === 'jobs') refreshJobs()
   if (name === 'eval') refreshEval()
   if (name === 'ceo') refreshCeo()
+  if (name === 'models') refreshModels()
 }
 tabButtons.forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)))
 showTab('cam')
 $('keybtn').addEventListener('click', () => { const k = prompt('Office key (config/server.password):'); if (k) { key = k.trim(); localStorage.setItem(KEY_STORE, key); toast('key saved') } })
 
 // ── state ─────────────────────────────────────────────────────
-let DATA = { workers: [], divisions: [], roles: [], builds: [], evaluations: [], models: [], settings: {} }
+let DATA = { workers: [], divisions: [], roles: [], builds: [], evaluations: [], models: [], catalog: [], summary: {}, gateways: {}, tools: [], officeTools: [], settings: {} }
 
 async function refreshBase () {
   try {
     const [h, w, m] = await Promise.all([api('/health'), api('/api/workers'), api('/api/models')])
-    Object.assign(DATA, w, { models: m.models, health: h })
+    Object.assign(DATA, w, { models: m.models, catalog: m.catalog, summary: m.summary, gateways: m.gateways, health: h })
+    if (DATA.tools.length) renderGateways()
     const on = $('conn')
     on.className = 'on'; on.textContent = `● online · ${DATA.workers.length} workers · ${h.active}/${h.workers} busy`
     $('cnt-workers').textContent = DATA.workers.length
+    if ($('tab-models').classList.contains('active')) renderCatalog()
   } catch (e) {
     const on = $('conn')
     on.className = 'off'; on.textContent = '○ offline ' + (e.message || '')
@@ -915,6 +978,163 @@ function evalRow (e) {
   return box
 }
 
+// ── Models & Tools tab ───────────────────────────────────────
+/** Gateways: base URL + API key per provider, saved to .env / settings.json. */
+function renderGateways () {
+  const box = $('gateways')
+  const g = DATA.gateways || {}
+  box.innerHTML = ''
+  for (const [id, label, hint] of [
+    ['9router', '9router', 'many providers behind one key'],
+    ['opencode', 'OpenCode Zen', 'OpenCode own gateway — has a free tier']
+  ]) {
+    const w = g[id] || { baseURL: '', hasKey: false, keyPreview: '', models: 0 }
+    const card = el('div', 'card compact')
+    card.style.marginBottom = '10px'
+    card.innerHTML =
+      `<div class="row" style="margin-bottom:8px"><b>${esc(label)}</b>` +
+      `<span class="badge ${w.hasKey ? 'b-done' : 'b-paused'}">${w.hasKey ? 'key set ' + esc(w.keyPreview) : 'no key'}</span>` +
+      `<span class="badge b-queued">${w.models} models</span></div>` +
+      `<div class="hint" style="margin-top:0;margin-bottom:6px">${esc(hint)}</div>`
+    const url = el('input'); url.type = 'text'; url.value = w.baseURL; url.placeholder = 'base URL'
+    const key = el('input'); key.type = 'password'; key.placeholder = w.hasKey ? 'leave blank to keep current key' : 'paste API key'
+    const row1 = el('div', 'row'); row1.append(url, key)
+    const btn = el('button', 'btn primary', 'save ' + label)
+    btn.onclick = () => saveGateway(id, url.value.trim(), key.value.trim())
+    const row2 = el('div', 'row'); row2.style.marginTop = '8px'
+    row2.append(btn, el('span', 'faint', w.baseURL))
+    card.append(row1, row2)
+    box.appendChild(card)
+  }
+}
+
+async function saveGateway (provider, baseURL, apiKey) {
+  if (!requireKey()) return
+  const patch = {}
+  if (baseURL) patch.baseURL = baseURL
+  if (apiKey) patch.apiKey = apiKey
+  if (!Object.keys(patch).length) { toast('nothing to change', 'err'); return }
+  try {
+    const r = await api('/api/gateways', { method: 'PUT', body: JSON.stringify({ [provider]: patch }) })
+    DATA.gateways = r.gateways
+    renderGateways()
+    toast(`${provider} gateway saved`, 'ok')
+  } catch (e) { toast(e.message, 'err') }
+}
+
+/** Sync a gateway's live model list (Zen is public and needs no key). */
+async function modelsSync (provider) {
+  if (!requireKey()) return
+  toast(`syncing ${provider} model list…`)
+  try {
+    const r = await api('/api/models/sync', { method: 'POST', body: JSON.stringify({ provider }) })
+    DATA.models = r.catalog.map(m => m.ref)
+    DATA.catalog = r.catalog
+    DATA.summary = r.summary
+    renderCatalog()
+    $('cnt-models').textContent = r.summary.available
+    toast(`${provider}: ${r.count} models (${r.free} free)`, 'ok')
+  } catch (e) { toast(e.message, 'err') }
+}
+
+async function addCustomModel () {
+  if (!requireKey()) return
+  const ref = $('m-custom').value.trim()
+  if (!ref) { toast('type a model ref first', 'err'); return }
+  try {
+    const r = await api('/api/models/custom', { method: 'POST', body: JSON.stringify({ ref }) })
+    DATA.catalog = r.catalog
+    DATA.models = r.catalog.map(m => m.ref)
+    $('m-custom').value = ''
+    renderCatalog()
+    toast(`added ${ref}`, 'ok')
+  } catch (e) { toast(e.message, 'err') }
+}
+
+async function removeCustomModel (ref) {
+  if (!requireKey()) return
+  try {
+    const r = await api('/api/models/custom', { method: 'DELETE', body: JSON.stringify({ ref }) })
+    DATA.catalog = r.catalog
+    DATA.models = r.catalog.map(m => m.ref)
+    renderCatalog()
+    toast(`removed ${ref}`, 'ok')
+  } catch (e) { toast(e.message, 'err') }
+}
+
+function renderCatalog () {
+  const rows = DATA.catalog || []
+  const q = ($('m-search').value || '').toLowerCase()
+  const src = $('m-source').value
+  const freeOnly = $('m-free').checked
+  const list = rows.filter(m =>
+    (!q || m.ref.toLowerCase().includes(q) || (m.name || '').toLowerCase().includes(q)) &&
+    (!src || m.source === src) &&
+    (!freeOnly || m.free)
+  )
+  const s = DATA.summary || {}
+  $('cat-count').textContent = `${s.available ?? rows.length} usable · ${s.free ?? 0} free · ${s.retired ?? 0} retired · from ${(s.sources || []).join(', ') || 'builtin'}`
+  $('cnt-models').textContent = rows.length
+  const tbody = $('m-tbody'); tbody.innerHTML = ''
+  if (!list.length) { const tr = el('tr'); const td = el('td', 'empty', 'no models match that filter'); td.colSpan = 4; tr.appendChild(td); tbody.appendChild(tr); return }
+  for (const m of list) {
+    const tr = el('tr')
+    tr.appendChild(el('td', 'mono-sm', m.ref))
+    const src2 = el('td'); src2.appendChild(el('span', 'badge ' + (m.source === 'custom' ? 'b-queued' : m.source === 'zen' ? 'b-done' : 'b-running'), m.source)); tr.appendChild(src2)
+    const tier = el('td')
+    if (m.retired) tier.appendChild(el('span', 'badge b-cancelled', 'retired'))
+    else tier.appendChild(el('span', 'badge ' + (m.free ? 'b-done' : 'b-paused'), m.free ? 'free' : 'paid'))
+    tr.appendChild(tier)
+    const act = el('td')
+    if (m.source === 'custom') { const x = el('button', 'mini danger', '✕ remove'); x.onclick = () => removeCustomModel(m.ref); act.appendChild(x) }
+    tr.appendChild(act)
+    tbody.appendChild(tr)
+  }
+}
+
+/** Tool pages: external gateway/docs links + the office's own endpoints. */
+function renderTools () {
+  const box = $('tool-links')
+  box.innerHTML = ''
+  const groups = {}
+  for (const t of DATA.tools || []) (groups[t.group] = groups[t.group] || []).push({ label: t.label, href: t.url, hint: t.hint })
+  for (const o of DATA.officeTools || []) (groups[o.group] = groups[o.group] || []).push({ label: o.label, href: o.path, hint: o.hint })
+  for (const [g, items] of Object.entries(groups)) {
+    const sec = el('div'); sec.style.marginBottom = '12px'
+    sec.appendChild(el('div', 'faint', g.toLowerCase()))
+    const row = el('div', 'row'); row.style.marginTop = '6px'
+    for (const it of items) {
+      const a = el('a', 'btn')
+      a.href = it.href; a.target = '_blank'; a.rel = 'noopener'
+      a.textContent = it.label; a.title = it.hint || ''
+      a.style.textDecoration = 'none'
+      row.appendChild(a)
+    }
+    sec.appendChild(row)
+    box.appendChild(sec)
+  }
+}
+
+async function refreshModels () {
+  try {
+    const [m, t] = await Promise.all([api('/api/models'), api('/api/tools')])
+    DATA.models = m.models
+    DATA.catalog = m.catalog
+    DATA.summary = m.summary
+    DATA.gateways = m.gateways
+    DATA.tools = t.tools
+    DATA.officeTools = t.office
+    $('cnt-models').textContent = m.summary.available
+    renderGateways(); renderCatalog(); renderTools()
+  } catch (e) { toast(e.message, 'err') }
+}
+
+window.saveGateway = saveGateway
+window.modelsSync = modelsSync
+window.addCustomModel = addCustomModel
+window.refreshModels = refreshModels
+window.renderCatalog = renderCatalog
+
 // ── placeholder wiring for the tab polls ──────────────────────
 setInterval(() => { if ($('tab-jobs').classList.contains('active')) refreshJobs(true) }, 3000)
 setInterval(() => { if ($('tab-eval').classList.contains('active')) refreshEval(true) }, 3000)
@@ -925,6 +1145,7 @@ setInterval(() => { if ($('tab-ceo').classList.contains('active')) refreshCeo(tr
 // initial fills
 function init () {
   fillDivisions(); fillModels(); fillCeoTargets(); refreshJobs(true); refreshEval(true); refreshWorkers(true); refreshCeo()
+  refreshModels()
 }
 refreshBase().then(init)
 })()

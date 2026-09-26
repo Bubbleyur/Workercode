@@ -19,7 +19,7 @@ import path from 'node:path'
 import http from 'node:http'
 import { OpenCodeClient } from '../lib/api.js'
 import { loadSettings, saveSettings, serverUrl, readPassword, ROOT, LOG_DIR, ensureDirs } from '../lib/state.js'
-import { ensureAllWorkspaces, workspacePath, workspaceModelRef, roleById, divisionById, slugId, validateWorker, DIV_COLORS, STAGES, STAGE_LABELS, loadModelCatalog, defaultModelRefs, CEO_ROLE } from '../lib/workspaces.js'
+import { ensureAllWorkspaces, workspacePath, workspaceModelRef, roleById, divisionById, slugId, validateWorker, DIV_COLORS, STAGES, STAGE_LABELS, loadAllModels, allModelRefs, defaultModelRefs, loadCustomModels, addCustomModel, removeCustomModel, gatewayState, saveGateway, syncModels, modelSummary, TOOL_PAGES, OFFICE_PAGES, CEO_ROLE } from '../lib/workspaces.js'
 import { runPipeline } from '../lib/pipeline.js'
 import { DryClient, dryRunScorer } from '../lib/dry.js'
 import { log } from '../lib/logger.js'
@@ -876,11 +876,74 @@ function startHttp () {
       return send(res, 200, { ok: true, settings: { evalThreshold: settings.evalThreshold, evalRetries: settings.evalRetries, previewBase: settings.previewBase, parallel: WORKERS } })
     }
 
-    // models catalog (for the new-build / worker forms)
+    // models catalog (for the new-build / worker forms + the Models tab)
     if (url === '/api/models' && method === 'GET') {
-      const catalog = loadModelCatalog()
-      const pool = catalog.length ? catalog.map(m => (m.providerID ? `${m.providerID}/${m.modelID || m.id}` : m.id)) : defaultModelRefs()
-      return send(res, 200, { models: pool, catalog })
+      const rows = loadAllModels()
+      return send(res, 200, {
+        models: allModelRefs(),
+        catalog: rows,
+        free: rows.filter(r => r.free && !r.retired).map(r => r.ref),
+        summary: modelSummary(),
+        gateways: gatewayState()
+      })
+    }
+
+    // gateway base URL / API keys (9router + OpenCode Zen)
+    if (url === '/api/gateways' && method === 'GET') {
+      return send(res, 200, { gateways: gatewayState() })
+    }
+    if (url === '/api/gateways' && (method === 'PUT' || method === 'POST')) {
+      if (!authorized(req)) return send(res, 401, { error: 'missing or wrong x-office-key header' })
+      const body = await readBody(req)
+      const results = []
+      for (const provider of ['9router', 'opencode']) {
+        if (!body[provider]) continue
+        const r = saveGateway(provider, body[provider])
+        if (r.error) return send(res, 400, { error: r.error })
+        results.push(provider)
+      }
+      if (!results.length) return send(res, 400, { error: 'nothing to save — send {"9router":{...}} or {"opencode":{...}}' })
+      reloadSettings()
+      for (const p of results) log.ok(`gateway saved: ${p}`)
+      return send(res, 200, { ok: true, gateways: gatewayState() })
+    }
+
+    // live model-list sync from a gateway
+    if (url === '/api/models/sync' && method === 'POST') {
+      if (!authorized(req)) return send(res, 401, { error: 'missing or wrong x-office-key header' })
+      const body = await readBody(req)
+      const provider = String(body.provider || 'opencode')
+      const r = await syncModels(provider)
+      if (r.error) return send(res, 400, { error: r.error })
+      log.ok(`models synced: ${r.provider} → ${r.count} models (${r.free} free)`)
+      publishEvent('models.synced', `${provider} catalog synced: ${r.count} models, ${r.free} free`, { provider })
+      return send(res, 200, { ...r, catalog: loadAllModels(), summary: modelSummary() })
+    }
+
+    // CEO-added model refs (any provider, any gateway)
+    if (url === '/api/models/custom' && method === 'POST') {
+      if (!authorized(req)) return send(res, 401, { error: 'missing or wrong x-office-key header' })
+      const body = await readBody(req)
+      const ref = String(body.ref || '').trim()
+      if (!ref || ref.split('/').filter(Boolean).length < 2) {
+        return send(res, 400, { error: 'model ref must look like provider/model-id' })
+      }
+      addCustomModel(ref, body.name ? String(body.name).slice(0, 80) : '')
+      log.ok(`custom model added: ${ref}`)
+      return send(res, 201, { ok: true, custom: loadCustomModels(), catalog: loadAllModels() })
+    }
+    if (url === '/api/models/custom' && method === 'DELETE') {
+      if (!authorized(req)) return send(res, 401, { error: 'missing or wrong x-office-key header' })
+      const body = await readBody(req)
+      const ref = String(body.ref || '')
+      removeCustomModel(ref)
+      log.ok(`custom model removed: ${ref}`)
+      return send(res, 200, { ok: true, custom: loadCustomModels(), catalog: loadAllModels() })
+    }
+
+    // tool pages: 9router / Zen / OpenCode docs + the office's own endpoints
+    if (url === '/api/tools' && method === 'GET') {
+      return send(res, 200, { tools: TOOL_PAGES, office: OFFICE_PAGES })
     }
 
     // workers CRUD

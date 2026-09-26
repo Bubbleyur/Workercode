@@ -19,6 +19,8 @@ notifications on their behalf.
 - `runs/ceo/` — CEO assistant reports and notice history.
 - `config/settings.json` — wizard-generated configuration (divisions, roles, workers).
 - `config/server.password` — the localhost OpenCode server credential.
+- `config/zen.models.json`, `config/9router.models.json`, `config/custom.models.json`
+  — the model catalog (synced / hand-added). Secrets never go here.
 
 ## General rules
 

@@ -30,7 +30,8 @@ const INCLUDE = [
 const EXCLUDE = new Set([
   '.env', 'node_modules', 'build', '.git', 'workspaces', 'apps', 'runs',
   'config/settings.json', 'config/server.password', 'config/bridge-sessions.json',
-  'config/9router.models.json', 'config/whatsapp-session',
+  'config/9router.models.json', 'config/zen.models.json', 'config/custom.models.json',
+  'config/whatsapp-session',
   'tools', '.DS_Store', 'Thumbs.db'
 ])
 
@@ -45,6 +46,8 @@ config/server.password
 config/bridge-sessions.json
 config/whatsapp-session/
 config/9router.models.json
+config/zen.models.json
+config/custom.models.json
 
 # office runtime state
 runs/
@@ -126,14 +129,33 @@ function main () {
     return
   }
 
-  const run = (args) => spawnSync('git', args, { cwd: DEST, stdio: 'inherit' })
-  if (!fs.existsSync(path.join(DEST, '.git'))) {
+  const run = (args, quiet) => spawnSync('git', args, { cwd: DEST, stdio: quiet ? 'pipe' : 'inherit' })
+  const fresh = !fs.existsSync(path.join(DEST, '.git'))
+  if (fresh) {
     const init = run(['init', '-b', 'main'])
     if (init.status !== 0) { console.warn('  git       git init failed — skipped'); return }
   }
-  if (run(['add', '-A']).status !== 0) { console.warn('  git       git add failed'); return }
-  const commit = run(['commit', '-m', `${pkg.name} v${pkg.version} — Digital Workers office with CEO assistant`])
-  console.log(commit.status === 0 ? '  git       initial commit created (no remote, nothing pushed)\n' : '  git       nothing to commit, or commit failed\n')
+  if (run(['add', '-A'], !fresh).status !== 0) { console.warn('  git       git add failed'); return }
+
+  const message = `${pkg.name} v${pkg.version} — Digital Workers office with CEO assistant`
+  if (fresh) {
+    const commit = run(['commit', '-m', message])
+    console.log(commit.status === 0 ? '  git       initial commit created (no remote, nothing pushed)\n' : '  git       commit failed\n')
+    return
+  }
+
+  // Already a repo: amend our own last commit so re-packing never piles up
+  // duplicate "initial commit" history for the CEO to push.
+  const head = run(['log', '-1', '--pretty=%s'], true)
+  const headMsg = (head.stdout || '').toString().trim()
+  const amend = headMsg === message
+    ? run(['commit', '--amend', '--no-edit'], true)
+    : run(['commit', '-m', message], true)
+  if (amend.status === 0) {
+    console.log(`  git       ${amend.stdout.toString().trim().split('\n').pop() || 'committed'} (no remote, nothing pushed)\n`)
+  } else {
+    console.log('  git       nothing to commit — build/ already matches the source\n')
+  }
 }
 
 main()

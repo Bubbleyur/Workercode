@@ -34,8 +34,10 @@ node index.js --wizard
 Navigable with **↑/↓ + Enter** for lists, **Space** to toggle multi-selects,
 radio choices shown as `●/○`, checkboxes as `✓`. It asks:
 
-- Model gateway → **9router** / Direct provider / Already configured
-- Key → paste `sk-...` (9router: stored as `NINEROUTER_API_KEY`)
+- Model gateway → **9router** / **OpenCode Zen** / Direct provider / Already configured
+  - 9router → paste `sk-...` (stored as `NINEROUTER_API_KEY`)
+  - OpenCode Zen → base URL, and a key only if you want the paid models —
+    the **free tier needs no key at all**, so you can leave it blank
 - Port for localhost session → **4096** (Enter = keep default)
 - Bind address → `127.0.0.1`, apps in parallel → **2**
 - Workspaces (company office) → count, then per dept: name, role, model, variant
@@ -70,6 +72,12 @@ shows whether Discord and WhatsApp alerts are wired up. Enable a bridge
 notification target in the wizard (or set `DISCORD_NOTIFY_CHANNEL_ID` /
 `WHATSAPP_CEO_JID`) to get build alerts and `!report` in chat.
 
+In the **Models & Tools** tab you can point the office at a gateway (9router
+or OpenCode Zen), hit **Sync** to pull its live model list, add any model ref
+by hand, and jump to the tool pages — gateway consoles, model/agent docs and
+the office's own endpoints. The role defaults are Zen **free** models, so a
+fresh install needs no key at all.
+
 Run with parts off if you only want a quick check:
 
 ```bash
@@ -96,10 +104,12 @@ follow it live in the control panel at `http://127.0.0.1:8099/panel`. Drop any
 folder with a `manifest.json` into `workspaces/<id>/inbox/` to build without
 scaffolding, or use the **New Build** tab to just type a one-line goal.
 
-9router model catalog refresh (when you add models):
+Model catalog refresh (Zen needs no key; 9router does):
 
 ```bash
-npm run 9router:sync
+npm run models:sync             # both gateways
+npm run models:sync -- opencode # Zen only
+node lib/models.js              # print what the office can use right now
 ```
 
 ---

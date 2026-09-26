@@ -16,6 +16,7 @@
     "new-app": "node scripts/new-app.js",
     "orchestrator": "node bin/orchestrator.js",
     "9router:sync": "node scripts/9router-sync.js",
+    "models:sync": "node scripts/models-sync.js",
     "bridge:discord": "node bridges/discord.js",
     "bridge:whatsapp": "node bridges/whatsapp.js",
     "deps:whatsapp": "npm install @whiskeysockets/baileys",

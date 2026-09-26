@@ -8,7 +8,8 @@ into an **always-on app-building office** that works like a live agency:
 - an **orchestrator** that watches folders and builds **many apps in parallel, 24/7**,
 - a pixel-art **office cam** web page (rooftop view) showing every AI worker live — running, idle, or **out of token**,
 - **Discord + WhatsApp bridges** so you can talk to the office from chat,
-- **9router** as the model gateway — one key, many models,
+- a **CEO assistant** — reports, CEO↔worker notices, and build alerts in chat,
+- **every model in one catalog**: OpenCode Zen's free tier out of the box, plus 9router, plus any ref you add,
 - installs as real OS services (systemd / NSSM) so it survives reboots.
 
 ```
@@ -28,7 +29,7 @@ into an **always-on app-building office** that works like a live agency:
 ```
 
 > **Theme: company office.** `strategy` plans, `engineering` builds,
-> `quality` reviews, `delivery` ships — each with its own 9router model.
+> `quality` reviews, `delivery` ships — each with its own model.
 
 ---
 
@@ -40,7 +41,7 @@ Prerequisites: **Node.js ≥ 18** and **OpenCode v2** (`opencode --version`).
 # 1. bootstrap (installs Node + OpenCode + deps if missing)
 bash scripts/bootstrap.sh                 # Linux / macOS (Windows: bootstrap.ps1)
 
-# 2. questionnaire — port, 9router key, workspaces, Discord / WhatsApp
+# 2. questionnaire — port, model gateway, workers, Discord / WhatsApp
 node index.js --wizard
 
 # 3. open the office (Ctrl+C stops; use services below for 24/7)
@@ -53,9 +54,13 @@ You get:
 Web session     http://127.0.0.1:4096        <- open this in a browser
 Username        opencode
 Password        <printed / config/server.password>
-Control center  http://127.0.0.1:8099/panel  <- office staff · CEO office · new build · jobs · evaluation
+Control center  http://127.0.0.1:8099/panel  <- office staff · CEO office · new build · jobs · evaluation · models & tools
 Office cam      http://127.0.0.1:8099/       <- clean rooftop view of the workers
 ```
+
+> **No API key?** Skip step 2's gateway question and the office still runs — the
+> role defaults are [OpenCode Zen](https://opencode.ai/zen) free models
+> (`opencode/…`). Add a key later from the **Models & Tools** tab.
 
 Everything runs as one process tree; `node index.js` shuts them down together.
 For a zero-terminal survivors-reboot setup:
@@ -82,17 +87,24 @@ OpenCode web UI. Credentials are printed on startup and cached in
 
 ## 2 · The company office — many models, many roles
 
-Every workspace = **role (agent) + 9router model + its own folders**:
+Every workspace = **role (agent) + model + its own folders**:
 
-| Workspace  | Role        | Default model                                  |
-|------------|-------------|------------------------------------------------|
-| strategy   | architect   | `9router/oc/union-alpha`                       |
-| engineering| builder     | `9router/oc/muse-spark-1.3-contributor-free`   |
-| quality    | reviewer    | `9router/sekai/tencent/hy4-preview`            |
-| delivery   | deployer    | `9router/sekai/cx/gpt-6-astra`                 |
+| Workspace     | Role          | Default model (free tier)                       |
+|---------------|---------------|--------------------------------------------------|
+| strategy      | architect     | `opencode/big-pickle`                            |
+| engineering   | builder       | `opencode/big-pickle`                            |
+| quality       | reviewer      | `opencode/muse-spark-1.3-contributor-free`       |
+| testing       | tester        | `opencode/nemotron-3-ultra-free`                 |
+| delivery      | deployer      | `opencode/muse-spark-1.3-contributor-free`       |
+| ceo-assistant | ceo-assistant | `opencode/big-pickle`                            |
+
+These defaults are **free** — a fresh clone runs the whole pipeline with no API
+key and no account. Swap any of them (per worker) from the panel's
+**Models & Tools** tab, or in `opencode.jsonc`.
 
 Built-in role agents live in `opencode.jsonc` (`architect`, `builder`,
-`reviewer`, `deployer`) with system prompts, models and guardrails.
+`reviewer`, `deployer`, `tester`, `data-scientist`, `support`,
+`ceo-assistant`) with system prompts, models and guardrails.
 
 Each workspace is interactive in its own right:
 
@@ -110,7 +122,29 @@ Start a **web session scoped to a workspace** directly:
 opencode --server http://127.0.0.1:4096 workspaces/engineering
 ```
 
-## 3 · 9router setup (many models, one key)
+## 3 · Models & gateways (free by default, one key if you want more)
+
+Two gateways ship wired up. Both are editable from the panel
+(**Models & Tools** tab) or from the CLI.
+
+### OpenCode Zen — the default, has a free tier
+
+OpenCode's own gateway. Refs look like `opencode/<model-id>`, and the free
+models need **no key at all**:
+
+```bash
+opencode/big-pickle                              # all-rounder
+opencode/muse-spark-1.3-contributor-free         # coding
+opencode/nemotron-3-ultra-free                   # fast reasoning
+opencode/space-bunny-free                        # free
+opencode/mimo-v2.6-flash-free                    # free
+opencode/ling-3.0-flash-fin-free                 # free
+opencode/deepseek-v4-flash-free                  # free
+```
+
+Get a key at <https://opencode.ai/zen> (optional) → stored as `OPENCODE_API_KEY`.
+
+### 9router — many providers behind one key (optional)
 
 9router is configured as an OpenAI-compatible provider in `opencode.jsonc`:
 
@@ -132,14 +166,29 @@ opencode --server http://127.0.0.1:4096 workspaces/engineering
 2. **Import the live model catalog:**
 
    ```bash
-   npm run 9router:sync
+   npm run models:sync          # Zen + 9router, whichever has a key
+   npm run models:sync -- opencode
+   npm run 9router:sync         # 9router only, also prints a providers block
    ```
 
    This queries `GET <baseURL>/models`, saves the list to
-   `config/9router.models.json`, and prints an updated `providers.9router`
-   block to paste into `opencode.jsonc`.
+   `config/zen.models.json` / `config/9router.models.json`, and the panel picks
+   it up immediately.
 3. Reference models as `9router/<model>` and route tiers as
    `9router/<model>#low|medium|high` — e.g. `9router/oc/union-alpha#high`.
+
+### The merged catalog
+
+`GET /api/models` returns one catalog merged from Zen + 9router + your own refs,
+free models first, retired ones flagged. Add any ref OpenCode can resolve —
+including a local provider — straight from the panel:
+
+```bash
+curl -X POST localhost:8099/api/models/custom \
+  -H "x-office-key: $KEY" -d '{"ref":"ollama/qwen3:8b"}'
+```
+
+Print it any time with `node lib/models.js`.
 
 The wizard lets you assign any catalog model to any workspace. Any
 OpenAI-compatible gateway works the same way — swap `baseURL` + `apiKey`.
@@ -167,13 +216,15 @@ OpenAI-compatible gateway works the same way — swap `baseURL` + `apiKey`.
 Status endpoints (the "detectable" part):
 
 ```
-http://127.0.0.1:8099/panel      control center — staff CRUD, CEO office, new build, jobs, evaluation
+http://127.0.0.1:8099/panel      control center — staff CRUD, CEO office, new build, jobs, evaluation, models & tools
 http://127.0.0.1:8099/           office cam — clean rooftop view, one desk per worker
 http://127.0.0.1:8099/health     {"ok":true,"active":1,"workers":2,"queued":0,...}
 http://127.0.0.1:8099/jobs       full job history
 http://127.0.0.1:8099/workspaces theme + worker table
 http://127.0.0.1:8099/api/ceo    CEO assistant status, notices, report archive
 http://127.0.0.1:8099/api/events office event feed (what the bridges push to you)
+http://127.0.0.1:8099/api/models merged model catalog (Zen + 9router + custom)
+http://127.0.0.1:8099/api/tools  gateway/docs/office page links for the panel
 ```
 
 The office cam (`public/office.html`, embedded in the panel) polls those
