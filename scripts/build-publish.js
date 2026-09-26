@@ -20,7 +20,7 @@ const ZIP = path.join(ROOT, 'build', 'bigpickle-vps.zip')
 const INCLUDE = [
   'index.js', 'index.cmd', 'index.sh',
   'package.json', 'AGENTS.md', 'README.md', 'QUICKSTART.mdx',
-  '.env.example', '.gitignore', 'opencode.jsonc',
+  '.env.example', '.gitignore', '.gitattributes', 'opencode.jsonc',
   'lib', 'bin', 'bridges', 'scripts', 'templates', 'public', 'inbox',
   'config/opencode.global.jsonc'
 ]

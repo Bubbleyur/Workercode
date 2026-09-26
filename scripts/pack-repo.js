@@ -60,6 +60,10 @@ build/
 _dist/
 *.log
 
+# publish output, in case build:publish is ever run from inside build/
+bigpickle-vps/
+bigpickle-vps.zip
+
 # OS junk
 .DS_Store
 Thumbs.db
